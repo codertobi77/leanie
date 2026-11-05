@@ -2227,8 +2227,8 @@ function SettingsScreen({
           title="Backend configuration"
           description={
             hasNeon
-              ? "Supabase is configured for auth, project storage, council requests, and file exports."
-              : "Supabase is not configured. Projects remain in this browser."
+              ? "Neon is configured for auth, project storage, council requests, and file exports."
+              : "Neon is not configured. Projects remain in this browser."
           }
         >
           <span className={`status ${hasNeon ? "status-green" : "status-amber"}`}>
@@ -2240,12 +2240,12 @@ function SettingsScreen({
           title="AI configuration"
           description={
             hasNeon
-              ? "Council requests are routed through the leanie-council Supabase Edge Function. Secrets remain on Supabase."
+              ? "Council requests are routed through the leanie-council Neon Edge Function. Secrets remain on Neon."
               : "Council responses use deterministic demonstration data. No AI provider is connected."
           }
         >
           <span className={`status ${hasNeon ? "status-blue" : "status-amber"}`}>
-            {hasNeon ? "Supabase function" : "Simulation only"}
+            {hasNeon ? "Neon function" : "Simulation only"}
           </span>
         </Setting>
         <Setting
@@ -2253,7 +2253,7 @@ function SettingsScreen({
           title="Privacy & AI usage"
           description={
             hasNeon
-              ? "Authenticated projects are stored in Supabase with row-level security. Anonymous sessions use this browser."
+              ? "Authenticated projects are stored in Neon with row-level security. Anonymous sessions use this browser."
               : "Projects are stored in your browser’s localStorage and are not synchronized or sent to a server."
           }
         >
@@ -2264,7 +2264,7 @@ function SettingsScreen({
         <Setting
           icon={User}
           title="Account"
-          description="Sign in to save projects and exports in Supabase."
+          description="Sign in to save projects and exports in Neon."
         >
           {auth.user ? (
             <div className="flex items-center gap-3">
@@ -2454,7 +2454,7 @@ export default function App() {
       "info",
       hasNeon ? "Council request sent" : "Council simulation started",
       hasNeon
-        ? "The Council request is being processed by Supabase."
+        ? "The Council request is being processed by Neon."
         : "Three specialist perspectives will analyze in parallel.",
     )
   }

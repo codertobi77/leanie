@@ -10,26 +10,31 @@ export default async function leanieCouncil(request: Request): Promise<Response>
   const baseUrl = (process.env.NVIDIA_NIM_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/+$/, "");
   const models = {
     strategic: process.env.LEANIE_GLM_MODEL || "z-ai/glm-5.3-flash",
-    feasibility: process.env.LEANIE_DEEPSEEK_MODEL || "deepseek-ai/deepseek-v4.1-flash",
-    critique: process.env.LEANIE_KIMI_MODEL || "moonshotai/kimi-k2.6",
     synthesis: process.env.LEANIE_ARBITER_MODEL || "z-ai/glm-5.3-flash",
   };
 
   if (!apiKey) {
-    return new Response(JSON.stringify(demoResult(brief, false)), { headers: cors });
+    return new Response(JSON.stringify(demoResult(brief, true)), { headers: cors });
   }
 
   try {
     const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
     async function chat(model: string, system: string, user: string) {
-      const res = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ model, temperature: 0.3, max_tokens: 1800, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
-      });
-      if (!res.ok) throw new Error(`NVIDIA NIM ${res.status}: ${(await res.text()).slice(0, 300)}`);
-      const data = await res.json();
-      return String(data?.choices?.[0]?.message?.content ?? "");
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 90000);
+      try {
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          signal: controller.signal,
+          method: "POST",
+          headers,
+          body: JSON.stringify({ model, temperature: 0.3, max_tokens: 400, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
+        });
+        if (!res.ok) throw new Error(`NVIDIA NIM ${res.status}: ${(await res.text()).slice(0, 300)}`);
+        const data = await res.json();
+        return String(data?.choices?.[0]?.message?.content ?? "");
+      } finally {
+        clearTimeout(timer);
+      }
     }
     const replyStrategic = await chat(models.strategic, "Return JSON only: {phases:[{title,objective,tasks:[{title,description,priority:'High'|'Medium'|'Low',duration,dependency,resource,deliverable}]}, risks:[{title,likelihood:'Low'|'Medium'|'High',mitigation}]}", JSON.stringify(brief));
     const strategic = parseJson(replyStrategic) ?? { phases: [], risks: [] };
@@ -57,7 +62,7 @@ export default async function leanieCouncil(request: Request): Promise<Response>
     })) : (strategic.risks || []);
     return new Response(JSON.stringify({ mode: "live", phases, risks, analysis: { strategic: parseJson(replyStrategic) } }), { headers: cors });
   } catch (error) {
-    return new Response(JSON.stringify(demoResult(brief, true, String(error))), { headers: cors });
+    return new Response(JSON.stringify(demoResult(brief, true, String(error).slice(0, 300))), { headers: cors });
   }
 }
 
@@ -70,7 +75,7 @@ function parseJson(text: string) {
 
 function demoResult(brief: any, configured: boolean, error?: string) {
   return {
-    mode: configured ? "demo" : "demo",
+    mode: "demo",
     phases: [
       { id: "phase-1", title: "01 — Validate the problem", objective: "Confirm urgent recurring problem.", tasks: [{ id: crypto.randomUUID(), title: "Define validation criteria", description: "Translate objective into measurable thresholds.", priority: "High", duration: "2 days", dependency: "None", resource: "Project lead", deliverable: "Validation scorecard" }] },
       { id: "phase-2", title: "02 — Prototype the core path", objective: "Build the smallest credible test.", tasks: [{ id: crypto.randomUUID(), title: "Build a testable prototype", description: "Produce focused prototype covering core workflow.", priority: "Medium", duration: "2 weeks", dependency: "Interview synthesis", resource: "Designer + developer", deliverable: "Interactive prototype" }] },

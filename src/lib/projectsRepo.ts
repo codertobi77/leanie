@@ -1,5 +1,5 @@
 import type { Project, Phase, Risk } from "../types"
-import { neonClient as supabase } from "./neon"
+import { neonClient } from "./neon"
 
 const STORAGE_KEY = "leanie-projects-v1"
 
@@ -45,8 +45,8 @@ function fromRow(row: any): Project {
 }
 
 export async function loadProjects(userId?: string | null): Promise<Project[]> {
-  if (userId && supabase) {
-    const { data, error } = await supabase
+  if (userId && neonClient) {
+    const { data, error } = await neonClient
       .from("leanie_projects")
       .select("*")
       .order("updated_at", { ascending: false })
@@ -62,8 +62,8 @@ export async function loadProjects(userId?: string | null): Promise<Project[]> {
 }
 
 export async function saveProject(project: Project, userId?: string | null): Promise<void> {
-  if (userId && supabase) {
-    const { error } = await supabase
+  if (userId && neonClient) {
+    const { error } = await neonClient
       .from("leanie_projects")
       .upsert(toRow(project, userId), { onConflict: "id" })
     if (error) throw error
@@ -77,8 +77,8 @@ export async function saveProject(project: Project, userId?: string | null): Pro
 }
 
 export async function removeProject(id: string, userId?: string | null): Promise<void> {
-  if (userId && supabase) {
-    const { error } = await supabase.from("leanie_projects").delete().eq("id", id)
+  if (userId && neonClient) {
+    const { error } = await neonClient.from("leanie_projects").delete().eq("id", id)
     if (error) throw error
     return
   }
