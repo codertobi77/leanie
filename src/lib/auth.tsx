@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
-import { neonClient as supabase } from "./neon"
+import { neonClient } from "./neon"
 
 export interface AuthUser {
   id: string
@@ -21,12 +21,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!supabase) {
+    if (!neonClient) {
       setLoading(false)
       return
     }
     let active = true
-    supabase.auth.getSession().then(({ data }) => {
+    neonClient.auth.getSession().then(({ data }) => {
       if (!active) return
       const sessionUser = data.session?.user
       setUser(
@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       )
       setLoading(false)
     })
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = neonClient.auth.onAuthStateChange((_event, session) => {
       const sessionUser = session?.user
       setUser(
         sessionUser ? { id: sessionUser.id, email: sessionUser.email ?? null } : null,
@@ -47,20 +47,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    if (!supabase) return "Supabase is not configured"
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (!neonClient) return "Neon is not configured"
+    const { error } = await neonClient.auth.signInWithPassword({ email, password })
     return error?.message ?? null
   }
 
   const signUp = async (email: string, password: string) => {
-    if (!supabase) return "Supabase is not configured"
-    const { error } = await supabase.auth.signUp({ email, password })
+    if (!neonClient) return "Neon is not configured"
+    const { error } = await neonClient.auth.signUp({ email, password })
     return error?.message ?? null
   }
 
   const signOut = async () => {
-    if (!supabase) return
-    await supabase.auth.signOut()
+    if (!neonClient) return
+    await neonClient.auth.signOut()
   }
 
   return (
