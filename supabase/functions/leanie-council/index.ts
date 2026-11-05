@@ -47,8 +47,8 @@ function getConfig() {
     feasibility:
       Deno.env.get("LEANIE_DEEPSEEK_MODEL") ||
       "deepseek-ai/deepseek-v4.1-flash",
-    critique: Deno.env.get("LEANIE_KIMI_MODEL") || "moonshotai/kimi-k3",
-    synthesis: Deno.env.get("LEANIE_ARBITER_MODEL") || "z-ai/glm-5.3",
+    critique: Deno.env.get("LEANIE_KIMI_MODEL") || "moonshotai/kimi-k2.6",
+    synthesis: Deno.env.get("LEANIE_ARBITER_MODEL") || "z-ai/glm-5.3-flash",
   };
   return { apiKey, baseUrl, models, configured: apiKey !== null };
 }
@@ -174,6 +174,24 @@ function demoResult(brief: Brief) {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
+  const authHeader = req.headers.get("Authorization") || "";
+  const jwt = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  if (!jwt) return json({ error: "Authentication required" }, 401);
+
+  const supabaseUrl = (Deno.env.get("SUPABASE_URL") || "").replace(/\/+$/, "");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      apikey: anonKey,
+    },
+  });
+  if (!userResponse.ok) {
+    return json({ error: "Invalid or expired user token" }, 401);
+  }
+  const authUser = await userResponse.json();
+  if (!authUser?.id) return json({ error: "Invalid user" }, 401);
 
   let brief: Brief;
   try {

@@ -1198,6 +1198,7 @@ function CouncilScreen({
   const [stage, setStage] = useState<CouncilStage>(0)
   const [paused, setPaused] = useState(false)
   const [failed, setFailed] = useState(false)
+  const auth = useAuth()
   const [result, setResult] = useState<any>(null)
   const completeRef = useRef(complete)
   completeRef.current = complete
@@ -1207,7 +1208,7 @@ function CouncilScreen({
   useEffect(() => {
     let cancelled = false
     const run = async () => {
-      if (!supabase) return
+      if (!supabase || !auth.user) return
       try {
         const { data, error } = await supabase.functions.invoke("leanie-council", {
           body: {
@@ -1689,6 +1690,76 @@ function PlanScreen({
       notify("error", "Storage export failed", String(error))
     }
   }
+  const printPlan = () => {
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+    const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(project.title)}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px; color: #101827; }
+  h1 { font-size: 28px; margin-bottom: 6px; }
+  h2 { font-size: 19px; margin-top: 26px; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; }
+  p, li { line-height: 1.55; }
+  .meta { color: #475569; font-size: 13px; margin-bottom: 20px; }
+  .task { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin: 10px 0; }
+  .task strong { display: block; }
+  .small { color: #475569; font-size: 12px; }
+  .risk { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 12px; margin: 8px 0; }
+</style>
+</head>
+<body>
+  <h1>${escapeHtml(project.title)}</h1>
+  <div class="meta">Leanie plan export · Updated ${escapeHtml(fmtDate(project.updatedAt))}</div>
+  <h2>Project overview</h2>
+  <p>${escapeHtml(project.objective)}</p>
+  <p class="small">Target date: ${escapeHtml(project.targetDate ? fmtDate(project.targetDate) : "No fixed deadline")} · ${project.phases.length} phases · ${project.phases.reduce((n, p) => n + p.tasks.length, 0)} tasks</p>
+  ${project.phases
+    .map(
+      (phase) => `
+    <h2>${escapeHtml(phase.title)}</h2>
+    <p class="small">${escapeHtml(phase.objective)}</p>
+    ${phase.tasks
+      .map(
+        (task) => `
+      <div class="task">
+        <strong>${escapeHtml(task.title)} (${task.priority}, ${escapeHtml(task.duration)})</strong>
+        <div>${escapeHtml(task.description)}</div>
+        <div class="small">Deliverable: ${escapeHtml(task.deliverable)} · Resource: ${escapeHtml(task.resource)} · Dependency: ${escapeHtml(task.dependency)}</div>
+      </div>`,
+      )
+      .join("")}`,
+    )
+    .join("")}
+  <h2>Risks and mitigation</h2>
+  ${project.risks
+    .map(
+      (risk) => `
+    <div class="risk">
+      <strong>${escapeHtml(risk.title)} (${risk.likelihood})</strong>
+      <div>${escapeHtml(risk.mitigation)}</div>
+    </div>`,
+    )
+    .join("")}
+</body>
+</html>`
+    const win = window.open("", "_blank", "noopener,noreferrer")
+    if (!win) {
+      notify("error", "PDF export failed", "Allow pop-ups to open the printable report.")
+      return
+    }
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => win.print(), 250)
+    setExportOpen(false)
+    notify("success", "PDF report opened", "Use the browser print dialog to save as PDF.")
+  }
   const exportFile = (type: "md" | "csv") => {
     let content = ""
     let mime = "text/markdown"
@@ -1786,6 +1857,9 @@ function PlanScreen({
                 </button>
                 <button onClick={() => exportToSupabase("md")}>
                   Cloud copy <span>.md</span>
+                </button>
+                <button onClick={printPlan}>
+                  PDF report <span>.pdf</span>
                 </button>
               </div>
             )}
