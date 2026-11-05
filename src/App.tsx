@@ -1968,6 +1968,7 @@ function PlanScreen({
   <ul>${(project.assumptions ?? []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
 </body>
 </html>`
+    console.log("printPlan opened")
     const iframe = document.createElement("iframe")
     iframe.setAttribute("aria-hidden", "true")
     iframe.style.position = "fixed"
@@ -1987,6 +1988,7 @@ function PlanScreen({
     win.document.open()
     win.document.write(html)
     win.document.close()
+    win.document.title = project.title
     win.focus()
     const cleanup = () => {
       window.setTimeout(() => {
