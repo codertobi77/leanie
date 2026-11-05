@@ -38,6 +38,7 @@ import {
   Sun,
   Target,
   Trash2,
+  User,
   X,
   Zap,
 } from "lucide-react"
@@ -52,6 +53,9 @@ import {
 } from "./components/Toast"
 import { analysts, cloneDemoPlan, demoProject } from "./data"
 import type { Phase, Project, ProjectFormData, Screen, Task } from "./types"
+import { useAuth } from "./lib/auth"
+import { hasSupabase, requireSupabase, supabase } from "./lib/supabase"
+import { loadProjects, saveProject, removeProject } from "./lib/projectsRepo"
 
 const STORAGE_KEY = "leanie-projects-v1"
 const blankForm: ProjectFormData = {
@@ -1189,17 +1193,52 @@ function CouncilScreen({
   complete,
 }: {
   project: Project
-  complete: () => void
+  complete: (result?: any) => void
 }) {
   const [stage, setStage] = useState<CouncilStage>(0)
   const [paused, setPaused] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [result, setResult] = useState<any>(null)
   const completeRef = useRef(complete)
   completeRef.current = complete
+  const resultRef = useRef(result)
+  resultRef.current = result
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      if (!supabase) return
+      try {
+        const { data, error } = await supabase.functions.invoke("leanie-council", {
+          body: {
+            title: project.title,
+            objective: project.objective,
+            context: project.context,
+            outcome: project.outcome,
+            targetDate: project.targetDate,
+            budget: project.budget,
+            resources: project.resources,
+          },
+        })
+        if (!cancelled && !error) setResult(data)
+        if (!cancelled && error) setFailed(true)
+      } catch {
+        if (!cancelled) setFailed(true)
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [project])
+
   useEffect(() => {
     if (paused || failed) return
     if (stage === 4) {
-      const done = window.setTimeout(() => completeRef.current(), 1800)
+      const done = window.setTimeout(
+        () => completeRef.current(resultRef.current),
+        1800,
+      )
       return () => clearTimeout(done)
     }
     const timer = window.setTimeout(
@@ -1588,6 +1627,68 @@ function PlanScreen({
     }))
     notify("info", "Task added", "The new task is ready to edit.")
   }
+  const exportToSupabase = async (type: "md" | "csv") => {
+    if (!supabase) {
+      notify("error", "Supabase unavailable", "Configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.")
+      return
+    }
+    const { data: sessionData } = await supabase.auth.getSession()
+    const user = sessionData.session?.user
+    if (!user) {
+      notify("info", "Sign in required", "Sign in to store exports in Supabase.")
+      return
+    }
+    try {
+      let content = ""
+      let mime = "text/markdown"
+      if (type === "md")
+        content = `# ${project.title}\n\n${project.objective}\n\n${project.phases.map((p) => `## ${p.title}\n${p.objective}\n\n${p.tasks.map((t) => `- **${t.title}** — ${t.description} (${t.priority}, ${t.duration})`).join("\n")}`).join("\n\n")}`
+      else {
+        mime = "text/csv"
+        content = [
+          "Phase,Task,Priority,Duration,Dependency,Resource,Deliverable",
+          ...project.phases.flatMap((p) =>
+            p.tasks.map((t) =>
+              [
+                p.title,
+                t.title,
+                t.priority,
+                t.duration,
+                t.dependency,
+                t.resource,
+                t.deliverable,
+              ]
+                .map((v) => `"${v.replace(/"/g, '""')}"`)
+              .join(","),
+            ),
+          ),
+        ].join("\n")
+      }
+      const ext = type === "md" ? "md" : "csv"
+      const path = `${user.id}/${project.id}-${Date.now()}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from("leanie-exports")
+        .upload(path, new Blob([content], { type: mime }), { upsert: false })
+      if (uploadError) throw uploadError
+      const { data: signed } = await supabase.storage
+        .from("leanie-exports")
+        .createSignedUrl(path, 3600)
+      await supabase.from("leanie_exports").insert({
+        user_id: user.id,
+        project_id: project.id,
+        format: type,
+        storage_path: path,
+      })
+      setExportOpen(false)
+      notify(
+        "success",
+        "Export stored",
+        signed?.signedUrl ?? "The file was saved to Supabase Storage.",
+      )
+    } catch (error) {
+      notify("error", "Storage export failed", String(error))
+    }
+  }
   const exportFile = (type: "md" | "csv") => {
     let content = ""
     let mime = "text/markdown"
@@ -1682,6 +1783,9 @@ function PlanScreen({
                 </button>
                 <button onClick={() => exportFile("csv")}>
                   Task data <span>.csv</span>
+                </button>
+                <button onClick={() => exportToSupabase("md")}>
+                  Cloud copy <span>.md</span>
                 </button>
               </div>
             )}
@@ -2013,6 +2117,22 @@ function SettingsScreen({
   theme: "light" | "dark"
   setTheme: (theme: "light" | "dark") => void
 }) {
+  const auth = useAuth()
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [authMessage, setAuthMessage] = useState<string | null>(null)
+  const signIn = async () => {
+    const error = await auth.signIn(email, password)
+    setAuthMessage(error ?? "Signed in successfully.")
+  }
+  const signUp = async () => {
+    const error = await auth.signUp(email, password)
+    setAuthMessage(error ?? "Account created. Check your inbox if confirmation is required.")
+  }
+  const signOut = async () => {
+    await auth.signOut()
+    setAuthMessage("Signed out.")
+  }
   return (
     <div className="page max-w-4xl">
       <p className="page-kicker">PREFERENCES</p>
@@ -2049,19 +2169,83 @@ function SettingsScreen({
           </select>
         </Setting>
         <Setting
+          icon={hasSupabase ? CheckCircle2 : Bot}
+          title="Backend configuration"
+          description={
+            hasSupabase
+              ? "Supabase is configured for auth, project storage, council requests, and file exports."
+              : "Supabase is not configured. Projects remain in this browser."
+          }
+        >
+          <span className={`status ${hasSupabase ? "status-green" : "status-amber"}`}>
+            {hasSupabase ? "Connected" : "Local only"}
+          </span>
+        </Setting>
+        <Setting
           icon={Bot}
           title="AI configuration"
-          description="Council responses use deterministic demonstration data. No AI provider is connected."
+          description={
+            hasSupabase
+              ? "Council requests are routed through the leanie-council Supabase Edge Function. Secrets remain on Supabase."
+              : "Council responses use deterministic demonstration data. No AI provider is connected."
+          }
         >
-          <span className="status status-amber">Simulation only</span>
+          <span className={`status ${hasSupabase ? "status-blue" : "status-amber"}`}>
+            {hasSupabase ? "Supabase function" : "Simulation only"}
+          </span>
         </Setting>
         <Setting
           icon={ShieldAlert}
           title="Privacy & AI usage"
-          description="Projects are stored in your browser’s localStorage and are not synchronized or sent to a server."
+          description={
+            hasSupabase
+              ? "Authenticated projects are stored in Supabase with row-level security. Anonymous sessions use this browser."
+              : "Projects are stored in your browser’s localStorage and are not synchronized or sent to a server."
+          }
         >
-          <span className="status status-green">Local only</span>
+          <span className={`status ${hasSupabase ? "status-green" : "status-green"}`}>
+            {hasSupabase ? "RLS enabled" : "Local only"}
+          </span>
         </Setting>
+        <Setting
+          icon={User}
+          title="Account"
+          description="Sign in to save projects and exports in Supabase."
+        >
+          {auth.user ? (
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-500">{auth.user.email ?? auth.user.id}</span>
+              <button onClick={signOut} className="btn-secondary">
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                className="settings-select"
+              />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                className="settings-select"
+              />
+              <div className="flex gap-2">
+                <button onClick={signIn} className="btn-secondary" disabled={auth.loading}>
+                  Sign in
+                </button>
+                <button onClick={signUp} className="btn-primary" disabled={auth.loading}>
+                  Sign up
+                </button>
+              </div>
+            </div>
+          )}
+        </Setting>
+        {authMessage && <p className="text-xs text-slate-500">{authMessage}</p>}
         <Setting
           icon={Info}
           title="Application"
@@ -2108,20 +2292,15 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("leanie-sidebar") === "collapsed",
   )
+  const auth = useAuth()
   const [theme, setTheme] = useState<"light" | "dark">(() =>
     localStorage.getItem("leanie-theme") === "dark" ? "dark" : "light",
   )
   const [toasts, setToasts] = useState<ToastItem[]>([])
-  const [projects, setProjects] = useState<Project[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      return stored ? JSON.parse(stored) : [demoProject]
-    } catch {
-      return [demoProject]
-    }
-  })
-  const [selectedId, setSelectedId] = useState(projects[0]?.id ?? "")
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedId, setSelectedId] = useState("")
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
+  const [projectsLoading, setProjectsLoading] = useState(true)
   const selected = useMemo(
     () => projects.find((p) => p.id === selectedId) ?? projects[0],
     [projects, selectedId],
@@ -2129,8 +2308,27 @@ export default function App() {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects))
-  }, [projects])
+    let active = true
+    setProjectsLoading(true)
+    loadProjects(auth.user?.id ?? null)
+      .then((loaded) => {
+        if (!active) return
+        const fallback = auth.user ? [] : [demoProject]
+        const next = loaded.length ? loaded : fallback
+        setProjects(next)
+        setSelectedId(next[0]?.id ?? "")
+        setProjectsLoading(false)
+      })
+      .catch((error) => {
+        if (!active) return
+        console.error(error)
+        setProjectsLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [auth.user])
+
   useEffect(() => {
     localStorage.setItem("leanie-theme", theme)
     document.documentElement.style.colorScheme = theme
@@ -2194,37 +2392,51 @@ export default function App() {
     }
     setProjects((p) => [project, ...p])
     setSelectedId(project.id)
+    saveProject(project, auth.user?.id ?? null).catch((error) =>
+      notify("error", "Project save failed", String(error)),
+    )
     navigate("council")
     notify(
       "info",
-      "Council simulation started",
-      "Three specialist perspectives will analyze in parallel.",
+      hasSupabase ? "Council request sent" : "Council simulation started",
+      hasSupabase
+        ? "The Council request is being processed by Supabase."
+        : "Three specialist perspectives will analyze in parallel.",
     )
   }
-  const completeCouncil = () => {
+  const completeCouncil = (result?: any) => {
     if (!selected) return
-    setProjects((p) =>
-      p.map((x) =>
-        x.id === selected.id
-          ? { ...x, status: "Plan ready", updatedAt: new Date().toISOString() }
-          : x,
-      ),
+    const updated: Project = {
+      ...selected,
+      status: "Plan ready",
+      updatedAt: new Date().toISOString(),
+      phases: result?.phases ?? selected.phases,
+      risks: result?.risks ?? selected.risks,
+    }
+    setProjects((p) => p.map((x) => (x.id === selected.id ? updated : x)))
+    saveProject(updated, auth.user?.id ?? null).catch((error) =>
+      notify("error", "Project save failed", String(error)),
     )
     navigate("results")
   }
-  const updateProject = (project: Project) =>
-    setProjects((p) => p.map((x) => (x.id === project.id ? project : x)))
+  const updateProject = (project: Project) => {
+    const updated = { ...project, updatedAt: new Date().toISOString() }
+    setProjects((p) => p.map((x) => (x.id === project.id ? updated : x)))
+    saveProject(updated, auth.user?.id ?? null).catch((error) =>
+      notify("error", "Project save failed", String(error)),
+    )
+  }
   const deleteProject = () => {
     if (!deleteTarget) return
     setProjects((p) => p.filter((x) => x.id !== deleteTarget.id))
     if (selectedId === deleteTarget.id) setSelectedId("")
+    const id = deleteTarget.id
     setDeleteTarget(null)
-    navigate("projects")
-    notify(
-      "success",
-      "Project deleted",
-      "The local project data has been removed.",
+    removeProject(id, auth.user?.id ?? null).catch((error) =>
+      notify("error", "Project delete failed", String(error)),
     )
+    navigate("projects")
+    notify("success", "Project deleted", "The project data has been removed.")
   }
 
   if (screen === "landing")
