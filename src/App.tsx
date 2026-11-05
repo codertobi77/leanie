@@ -52,7 +52,7 @@ import {
   type ToastKind,
 } from "./components/Toast"
 import { analysts, cloneDemoPlan, demoProject } from "./data"
-import type { Phase, Project, ProjectFormData, Screen, Task } from "./types"
+import type { Phase, Project, ProjectFormData, Risk, Screen, Task } from "./types"
 import { useAuth } from "./lib/auth"
 import { hasNeon, requireNeon, neonClient } from "./lib/neon"
 import { loadProjects, saveProject, removeProject } from "./lib/projectsRepo"
@@ -843,6 +843,35 @@ function ProjectsScreen({
   remove: (p: Project) => void
   navigate: (s: Screen) => void
 }) {
+  const [query, setQuery] = useState("")
+  const [status, setStatus] = useState("all")
+  const [sort, setSort] = useState("updated-desc")
+  const [tag, setTag] = useState("")
+  const filtered = useMemo(() => {
+    let next = [...projects]
+    if (query.trim()) {
+      const q = query.toLowerCase()
+      next = next.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.objective.toLowerCase().includes(q) ||
+          (p.context ?? "").toLowerCase().includes(q),
+      )
+    }
+    if (status !== "all") next = next.filter((p) => p.status === status)
+    if (tag.trim()) {
+      const t = tag.toLowerCase()
+      next = next.filter((p) => (p.tags ?? []).some((item) => item.toLowerCase().includes(t)))
+    }
+    next.sort((a, b) => {
+      if (sort === "updated-desc") return +new Date(b.updatedAt) - +new Date(a.updatedAt)
+      if (sort === "updated-asc") return +new Date(a.updatedAt) - +new Date(b.updatedAt)
+      if (sort === "title") return a.title.localeCompare(b.title)
+      if (sort === "status") return a.status.localeCompare(b.status)
+      return 0
+    })
+    return next
+  }, [projects, query, status, sort, tag])
   return (
     <div className="page">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -850,7 +879,7 @@ function ProjectsScreen({
           <p className="page-kicker">PROJECT LIBRARY</p>
           <h2 className="page-title">My projects</h2>
           <p className="page-subtitle">
-            Plans and analyses saved in this browser.
+            Plans and analyses ({projects.length}) · {filtered.length} shown
           </p>
         </div>
         <button onClick={() => navigate("new")} className="btn-primary">
@@ -858,8 +887,48 @@ function ProjectsScreen({
           New project
         </button>
       </div>
+      <div className="mt-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-600 md:grid-cols-[1fr_auto_auto_auto]">
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search title, objective or context…"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+          aria-label="Search projects"
+        />
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+          aria-label="Filter by status"
+        >
+          <option value="all">All statuses</option>
+          {["Draft", "Analyzing", "Plan ready", "Validated"].map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <select
+          value={sort}
+          onChange={(event) => setSort(event.target.value)}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+          aria-label="Sort projects"
+        >
+          <option value="updated-desc">Newest first</option>
+          <option value="updated-asc">Oldest first</option>
+          <option value="title">Title</option>
+          <option value="status">Status</option>
+        </select>
+        <input
+          value={tag}
+          onChange={(event) => setTag(event.target.value)}
+          placeholder="Tag filter"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+          aria-label="Filter by tag"
+        />
+      </div>
       <div className="mt-9 grid gap-4 lg:grid-cols-2">
-        {projects.map((p) => (
+        {filtered.map((p) => (
           <article
             key={p.id}
             className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 hover:shadow-lg hover:shadow-slate-200/40"
@@ -1452,9 +1521,9 @@ function Results({ project, plan }: { project: Project; plan: () => void }) {
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <ReportSection icon={Lightbulb} title="Key assumptions" compact>
           <ul className="report-list numbered">
-            <li>Target users experience the problem at least monthly.</li>
-            <li>A prototype is sufficient to test the core value.</li>
-            <li>Decision-makers accept a staged investment model.</li>
+            {(project.assumptions ?? []).map((assumption) => (
+              <li key={assumption}>{assumption}</li>
+            ))}
           </ul>
         </ReportSection>
         <ReportSection icon={ShieldAlert} title="Identified risks" compact>
@@ -1576,16 +1645,25 @@ function PlanScreen({
   project,
   updateProject,
   notify,
+  navigate,
 }: {
   project: Project
   updateProject: (p: Project) => void
   notify: (kind: ToastKind, title: string, message?: string) => void
+  navigate?: (s: Screen) => void
 }) {
   const [expanded, setExpanded] = useState<string[]>(
     project.phases.map((p) => p.id),
   )
   const [confirmValidation, setConfirmValidation] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [draggingTask, setDraggingTask] = useState<{
+    phaseId: string
+    index: number
+  } | null>(null)
+  const [dragOverTask, setDragOverTask] = useState<number | null>(null)
+  const [newRiskTitle, setNewRiskTitle] = useState("")
+  const [newSuccessCriterion, setNewSuccessCriterion] = useState("")
   const allTasks = project.phases.flatMap((phase) => phase.tasks)
   const completedTasks = allTasks.filter((task) => task.completed).length
   const progress = allTasks.length
@@ -1601,11 +1679,18 @@ function PlanScreen({
     patch({
       phases: project.phases.map((p) => (p.id === phaseId ? updater(p) : p)),
     })
-  const updateTask = (phaseId: string, taskId: string, data: Partial<Task>) =>
-    updatePhase(phaseId, (p) => ({
-      ...p,
-      tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, ...data } : t)),
-    }))
+  const updateTask = (phaseId: string, taskId: string, data: Partial<Task>) => {
+    let blocked = false
+    updatePhase(phaseId, (p) => {
+      const tasks = p.tasks.map((t) => (t.id === taskId ? { ...t, ...data } : t))
+      if ("dependency" in data && hasDependencyCycle(tasks)) {
+        blocked = true
+        return p
+      }
+      return { ...p, tasks }
+    })
+    if (blocked) notify("error", "Invalid dependency", "This task change would create a cycle.")
+  }
   const moveTask = (phaseId: string, index: number, direction: -1 | 1) =>
     updatePhase(phaseId, (p) => {
       const tasks = [...p.tasks]
@@ -1638,6 +1723,97 @@ function PlanScreen({
     }))
     notify("info", "Task added", "The new task is ready to edit.")
   }
+  const hasDependencyCycle = (tasks: Task[]) => {
+    const byTitle = new Map(tasks.map((task) => [task.title, task.id]))
+    const graph = new Map(tasks.map((task) => [task.id, [] as string[]]))
+    tasks.forEach((task) => {
+      const targetId = task.dependency !== "None" ? byTitle.get(task.dependency) : undefined
+      if (targetId) graph.get(task.id)?.push(targetId)
+    })
+    const state = new Map<string, "white" | "gray" | "black">(
+      tasks.map((task) => [task.id, "white"]),
+    )
+    const visit = (id: string): boolean => {
+      if (state.get(id) === "gray") return true
+      if (state.get(id) === "black") return false
+      state.set(id, "gray")
+      for (const next of graph.get(id) ?? []) {
+        if (visit(next)) return true
+      }
+      state.set(id, "black")
+      return false
+    }
+    return tasks.some((task) => visit(task.id))
+  }
+
+  const reorderTask = (phaseId: string, from: number, to: number) => {
+    if (from === to) return
+    updatePhase(phaseId, (p) => {
+      const tasks = [...p.tasks]
+      if (from < 0 || to < 0 || from >= tasks.length || to >= tasks.length) return p
+      const [moved] = tasks.splice(from, 1)
+      tasks.splice(to, 0, moved)
+      return hasDependencyCycle(tasks)
+        ? p
+        : { ...p, tasks }
+    })
+    if (hasDependencyCycle([]) === false) {
+      // cycle notifications are handled at dependency change, not here
+    }
+  }
+
+  const setSuccessCriteria = (next: string[]) => {
+    const updated = { ...project, successCriteria: next, updatedAt: new Date().toISOString() }
+    updateProject(updated)
+    updateProject(updated)
+  }
+
+  const addSuccessCriterion = () => {
+    const value = newSuccessCriterion.trim()
+    if (!value) return
+    const next = [...(project.successCriteria ?? []), value]
+    setSuccessCriteria(next)
+    setNewSuccessCriterion("")
+    notify("success", "Criterion added", "The success criterion was saved.")
+  }
+
+  const removeSuccessCriterion = (index: number) => {
+    const next = (project.successCriteria ?? []).filter((_, itemIndex) => itemIndex !== index)
+    setSuccessCriteria(next)
+  }
+
+  const addRisk = () => {
+    const title = newRiskTitle.trim()
+    if (!title) return
+    const nextRisk = { title, likelihood: "Medium" as const, mitigation: "Describe the mitigation strategy." }
+    const updated = { ...project, risks: [...project.risks, nextRisk], updatedAt: new Date().toISOString() }
+    updateProject(updated)
+    updateProject(updated)
+    setNewRiskTitle("")
+    notify("info", "Risk added", "Review the new risk and its mitigation.")
+  }
+
+  const removeRisk = (index: number) => {
+    const next = project.risks.filter((_, itemIndex) => itemIndex !== index)
+    const updated = { ...project, risks: next, updatedAt: new Date().toISOString() }
+    updateProject(updated)
+    updateProject(updated)
+  }
+
+  const updateRisk = (index: number, data: Partial<Risk>) => {
+    const next = project.risks.map((risk, itemIndex) =>
+      itemIndex === index ? { ...risk, ...data } : risk,
+    )
+    const updated = { ...project, risks: next, updatedAt: new Date().toISOString() }
+    updateProject(updated)
+    updateProject(updated)
+  }
+
+  const putSuccessCriterion = (index: number, value: string) => {
+    const next = (project.successCriteria ?? []).map((item, itemIndex) => (itemIndex === index ? value : item))
+    setSuccessCriteria(next)
+  }
+
   const exportToNeon = async (type: "md" | "csv") => {
     const baseUrl = import.meta.env.VITE_NEON_FUNCTION_STORAGE_BASE_URL as string | undefined
     if (!baseUrl) {
@@ -1682,15 +1858,15 @@ function PlanScreen({
 <meta charset="utf-8" />
 <title>${escapeHtml(project.title)}</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px; color: #101827; }
-  h1 { font-size: 28px; margin-bottom: 6px; }
-  h2 { font-size: 19px; margin-top: 26px; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; }
-  p, li { line-height: 1.55; }
-  .meta { color: #475569; font-size: 13px; margin-bottom: 20px; }
-  .task { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin: 10px 0; }
-  .task strong { display: block; }
-  .small { color: #475569; font-size: 12px; }
-  .risk { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 12px; margin: 8px 0; }
+  @page { margin: 18mm; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; color: #101827; }
+  h1 { font-size: 26px; margin: 0; }
+  h2 { font-size: 18px; margin-top: 24px; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; }
+  p, li { line-height: 1.5; }
+  .meta { color: #475569; font-size: 12px; margin: 8px 0 20px; }
+  .task, .risk { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin: 8px 0; }
+  .task strong, .risk strong { display: block; }
+  .small { color: #475569; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -1698,48 +1874,77 @@ function PlanScreen({
   <div class="meta">Leanie plan export · Updated ${escapeHtml(fmtDate(project.updatedAt))}</div>
   <h2>Project overview</h2>
   <p>${escapeHtml(project.objective)}</p>
-  <p class="small">Target date: ${escapeHtml(project.targetDate ? fmtDate(project.targetDate) : "No fixed deadline")} · ${project.phases.length} phases · ${project.phases.reduce((n, p) => n + p.tasks.length, 0)} tasks</p>
+  <h2>Phases and tasks</h2>
   ${project.phases
     .map(
       (phase) => `
-    <h2>${escapeHtml(phase.title)}</h2>
-    <p class="small">${escapeHtml(phase.objective)}</p>
-    ${phase.tasks
-      .map(
-        (task) => `
-      <div class="task">
-        <strong>${escapeHtml(task.title)} (${task.priority}, ${escapeHtml(task.duration)})</strong>
-        <div>${escapeHtml(task.description)}</div>
-        <div class="small">Deliverable: ${escapeHtml(task.deliverable)} · Resource: ${escapeHtml(task.resource)} · Dependency: ${escapeHtml(task.dependency)}</div>
-      </div>`,
-      )
-      .join("")}`,
+      <h3>${escapeHtml(phase.title)}</h3>
+      <p class="small">${escapeHtml(phase.objective)}</p>
+      ${phase.tasks
+        .map(
+          (task) => `
+          <div class="task">
+            <strong>${escapeHtml(task.title)} (${task.priority}, ${escapeHtml(task.duration)})</strong>
+            <div>${escapeHtml(task.description)}</div>
+            <div class="small">Deliverable: ${escapeHtml(task.deliverable)} · Resource: ${escapeHtml(task.resource)} · Dependency: ${escapeHtml(task.dependency)}</div>
+          </div>`,
+        )
+        .join("")}`,
     )
     .join("")}
   <h2>Risks and mitigation</h2>
   ${project.risks
     .map(
       (risk) => `
-    <div class="risk">
-      <strong>${escapeHtml(risk.title)} (${risk.likelihood})</strong>
-      <div>${escapeHtml(risk.mitigation)}</div>
-    </div>`,
+      <div class="risk">
+        <strong>${escapeHtml(risk.title)} (${risk.likelihood})</strong>
+        <div>${escapeHtml(risk.mitigation)}</div>
+      </div>`,
     )
     .join("")}
+  <h2>Success criteria</h2>
+  <ul>${(project.successCriteria ?? []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+  <h2>Key assumptions</h2>
+  <ul>${(project.assumptions ?? []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
 </body>
 </html>`
-    const win = window.open("", "_blank", "noopener,noreferrer")
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("aria-hidden", "true")
+    iframe.style.position = "fixed"
+    iframe.style.right = "0"
+    iframe.style.bottom = "0"
+    iframe.style.width = "0"
+    iframe.style.height = "0"
+    iframe.style.border = "0"
+    document.body.appendChild(iframe)
+    const win = iframe.contentWindow
     if (!win) {
-      notify("error", "PDF export failed", "Allow pop-ups to open the printable report.")
+      document.body.removeChild(iframe)
+      setExportOpen(false)
+      notify("error", "PDF export failed", "The browser could not open a printable view.")
       return
     }
+    win.document.open()
     win.document.write(html)
     win.document.close()
     win.focus()
-    setTimeout(() => win.print(), 250)
-    setExportOpen(false)
-    notify("success", "PDF report opened", "Use the browser print dialog to save as PDF.")
+    const cleanup = () => {
+      window.setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe)
+      }, 1000)
+    }
+    win.onafterprint = cleanup
+    window.setTimeout(cleanup, 3000)
+    try {
+      win.print()
+      setExportOpen(false)
+      notify("success", "Print dialog opened", "Choose “Save as PDF”.")
+    } catch {
+      cleanup()
+      notify("error", "PDF export failed", "The browser blocked the print dialog.")
+    }
   }
+
   const exportFile = (type: "md" | "csv") => {
     let content = ""
     let mime = "text/markdown"
@@ -1926,6 +2131,24 @@ function PlanScreen({
                         task={task}
                         index={index}
                         total={phase.tasks.length}
+                        draggable
+                        onDragStart={() => setDraggingTask({ phaseId: phase.id, index })}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          if (draggingTask?.phaseId === phase.id) setDragOverTask(index)
+                        }}
+                        onDrop={() => {
+                          if (draggingTask?.phaseId === phase.id && draggingTask.index !== index) {
+                            reorderTask(phase.id, draggingTask.index, index)
+                          }
+                          setDraggingTask(null)
+                          setDragOverTask(null)
+                        }}
+                        onDragEnd={() => {
+                          setDraggingTask(null)
+                          setDragOverTask(null)
+                        }}
+                        className={draggingTask?.phaseId === phase.id && dragOverTask === index ? "ring-2 ring-blue-400 rounded-lg" : ""}
                         update={(data) => updateTask(phase.id, task.id, data)}
                         remove={() => removeTask(phase.id, task.id)}
                         move={(dir) => moveTask(phase.id, index, dir)}
@@ -1959,41 +2182,102 @@ function PlanScreen({
               Review Council assumptions before validation. Validation remains a
               human decision.
             </p>
-            <button className="mt-4 text-xs font-semibold text-amber-900 underline underline-offset-4">
-              Review 3 assumptions
-            </button>
+            {navigate && (
+               <button
+                 type="button"
+                 onClick={() => {
+                   const rework = { ...project, status: "Analyzing" as Project["status"], updatedAt: new Date().toISOString() }
+                   updateProject(rework)
+                   navigate("council")
+                   notify("info", "Council re-run started", "This refreshes the plan.")
+                 }}
+                 className="mt-4 text-xs font-semibold text-amber-900 underline underline-offset-4"
+               >
+                 Re-run Council analysis
+               </button>
+             )}
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
             <h3 className="text-sm font-semibold">Success criteria</h3>
             <ul className="mt-4 space-y-3 text-xs leading-5 text-slate-600">
-              <li className="flex gap-2">
-                <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" />
-                At least 6 of 8 interviews confirm recurring urgency.
-              </li>
-              <li className="flex gap-2">
-                <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" />
-                4 of 5 test users complete the critical path.
-              </li>
-              <li className="flex gap-2">
-                <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" />
-                Delivery estimate remains inside the stated constraint.
-              </li>
+              {(project.successCriteria ?? []).map((criterion, index) => (
+                <li key={`${criterion}-${index}`} className="flex items-center gap-2">
+                  <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" />
+                  <input
+                    value={criterion}
+                    onChange={(event) => putSuccessCriterion(index, event.target.value)}
+                    className="min-w-0 flex-1 border-b border-transparent text-xs outline-none focus:border-slate-300"
+                    aria-label="Success criterion"
+                  />
+                  <button
+                    onClick={() => removeSuccessCriterion(index)}
+                    className="text-red-500"
+                    type="button"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </li>
+              ))}
             </ul>
+            <div className="mt-4 flex gap-2">
+              <input
+                value={newSuccessCriterion}
+                onChange={(event) => setNewSuccessCriterion(event.target.value)}
+                placeholder="Add criterion"
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs"
+              />
+              <button type="button" onClick={addSuccessCriterion} className="btn-secondary">
+                <Plus size={13} />
+              </button>
+            </div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
             <h3 className="text-sm font-semibold">Risks & mitigation</h3>
             <div className="mt-4 space-y-4">
-              {project.risks.map((r) => (
-                <div key={r.title}>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-medium">{r.title}</p>
-                    <span className="status status-amber">{r.likelihood}</span>
+              {project.risks.map((risk, index) => (
+                <div key={`${risk.title}-${index}`} className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={risk.title}
+                      onChange={(event) => updateRisk(index, { title: event.target.value })}
+                      className="min-w-0 flex-1 text-xs font-medium outline-none border-b border-transparent focus:border-slate-300"
+                      aria-label="Risk title"
+                    />
+                    <select
+                      value={risk.likelihood}
+                      onChange={(event) =>
+                        updateRisk(index, { likelihood: event.target.value as Risk["likelihood"] })
+                      }
+                      className="rounded-md border border-slate-200 bg-white text-[10px]"
+                    >
+                      <option>Low</option>
+                      <option>Medium</option>
+                      <option>High</option>
+                    </select>
+                    <button onClick={() => removeRisk(index)} className="text-red-500" type="button">
+                      <Trash2 size={12} />
+                    </button>
                   </div>
-                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                    {r.mitigation}
-                  </p>
+                  <textarea
+                    value={risk.mitigation}
+                    onChange={(event) => updateRisk(index, { mitigation: event.target.value })}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-5"
+                    rows={2}
+                    aria-label="Mitigation"
+                  />
                 </div>
               ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <input
+                value={newRiskTitle}
+                onChange={(event) => setNewRiskTitle(event.target.value)}
+                placeholder="New risk"
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs"
+              />
+              <button type="button" onClick={addRisk} className="btn-secondary">
+                <Plus size={13} />
+              </button>
             </div>
           </div>
         </aside>
@@ -2026,6 +2310,12 @@ function TaskRow({
   remove,
   move,
   toggle,
+  draggable,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  className,
 }: {
   task: Task
   index: number
@@ -2034,13 +2324,24 @@ function TaskRow({
   remove: () => void
   move: (d: -1 | 1) => void
   toggle: () => void
+  draggable?: boolean
+  onDragStart?: () => void
+  onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void
+  onDrop?: () => void
+  onDragEnd?: () => void
+  className?: string
 }) {
   const [open, setOpen] = useState(false)
   return (
     <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       className={`task-row border-b border-slate-100 py-4 last:border-0 ${
         task.completed ? "is-complete" : ""
-      }`}
+      } ${className ?? ""}`}
     >
       <div className="flex items-center gap-2">
         <button
@@ -2466,6 +2767,9 @@ export default function App() {
       updatedAt: new Date().toISOString(),
       phases: result?.phases ?? selected.phases,
       risks: result?.risks ?? selected.risks,
+      assumptions: result?.assumptions ?? selected.assumptions,
+      successCriteria: result?.successCriteria ?? selected.successCriteria,
+      tags: result?.tags ?? selected.tags,
     }
     setProjects((p) => p.map((x) => (x.id === selected.id ? updated : x)))
     saveProject(updated, auth.user?.id ?? null).catch((error) =>
@@ -2589,6 +2893,7 @@ export default function App() {
               project={selected}
               updateProject={updateProject}
               notify={notify}
+              navigate={navigate}
             />
           )}
           {screen === "settings" && (

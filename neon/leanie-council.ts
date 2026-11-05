@@ -9,8 +9,8 @@ export default async function leanieCouncil(request: Request): Promise<Response>
   const apiKey = process.env.NVIDIA_NIM_API_KEY || "";
   const baseUrl = (process.env.NVIDIA_NIM_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/+$/, "");
   const models = {
-    strategic: process.env.LEANIE_GLM_MODEL || "nvidia/nemotron-3.5-bolt-e4b",
-    synthesis: process.env.LEANIE_ARBITER_MODEL || "nvidia/nemotron-3.5-bolt-e4b",
+    strategic: process.env.LEANIE_GLM_MODEL || "google/diffusiongemma-26b-a4b-it",
+    synthesis: process.env.LEANIE_ARBITER_MODEL || "google/diffusiongemma-26b-a4b-it",
   };
 
   if (!apiKey) {
@@ -37,7 +37,7 @@ export default async function leanieCouncil(request: Request): Promise<Response>
         clearTimeout(timer);
       }
     }
-    const replyStrategic = await chat(models.strategic, "Return JSON only: {phases:[{title,objective,tasks:[{title,description,priority:'High'|'Medium'|'Low',duration,dependency,resource,deliverable}]}, risks:[{title,likelihood:'Low'|'Medium'|'High',mitigation}]}", JSON.stringify(brief));
+    const replyStrategic = await chat(models.strategic, "Return JSON only with fields: phases array {title,objective,tasks {title,description,priority,duration,dependency,resource,deliverable}}; risks array {title,likelihood,mitigation}; assumptions string[]; successCriteria string[]. No markdown.", JSON.stringify(brief));
     const strategic = parseJson(replyStrategic) ?? { phases: [], risks: [] };
     // The strategic output already contains the phases/tasks and risks.
     // A second free-model synthesis pass can omit task details, so we use
@@ -64,7 +64,9 @@ export default async function leanieCouncil(request: Request): Promise<Response>
       likelihood: ["Low", "Medium", "High"].includes(r.likelihood) ? r.likelihood : "Medium",
       mitigation: r.mitigation || "",
     })) : (strategic.risks || []);
-    return new Response(JSON.stringify({ mode: "live", phases, risks, analysis: { strategic: parseJson(replyStrategic) } }), { headers: cors });
+    const assumptions = Array.isArray(parsed.assumptions) ? parsed.assumptions : (strategic.assumptions || []);
+    const successCriteria = Array.isArray(parsed.successCriteria) ? parsed.successCriteria : (strategic.successCriteria || []);
+    return new Response(JSON.stringify({ mode: "live", phases, risks, assumptions, successCriteria, analysis: { strategic: parseJson(replyStrategic) } }), { headers: cors });
   } catch (error) {
     return new Response(JSON.stringify(demoResult(brief, true, String(error).slice(0, 300))), { headers: cors });
   }
@@ -86,6 +88,8 @@ function demoResult(brief: any, configured: boolean, error?: string) {
       { id: "phase-3", title: "03 — Test and decide", objective: "Measure and decide.", tasks: [{ id: crypto.randomUUID(), title: "Make proceed / revise decision", description: "Compare evidence to thresholds.", priority: "High", duration: "2 days", dependency: "Test findings", resource: "Project sponsor", deliverable: "Decision memo" }] },
     ],
     risks: [{ title: "Insufficient access to target users", likelihood: "Medium", mitigation: "Recruit through two channels." }, { title: "Prototype scope expands", likelihood: "High", mitigation: "Freeze critical path." }],
+    assumptions: ["Target users experience the problem monthly.", "A prototype is sufficient to test value.", "Decision-makers accept staged investment."],
+    successCriteria: ["At least 6 of 8 interviews confirm urgency.", "4 of 5 users complete the critical path.", "Delivery estimate remains inside budget."],
     configured,
     ...(error ? { error } : {}),
   };

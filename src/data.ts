@@ -139,6 +139,20 @@ export const sampleRisks: Risk[] = [
   },
 ]
 
+export const sampleAssumptions = [
+  "Target users experience the problem at least monthly.",
+  "A prototype is sufficient to test the core value.",
+  "Decision-makers accept a staged investment model.",
+]
+
+export const sampleSuccessCriteria = [
+  "At least 6 of 8 interviews confirm recurring urgency.",
+  "4 of 5 test users complete the critical path.",
+  "Delivery estimate remains inside the stated constraint.",
+]
+
+export const sampleTags = ["validation", "prototype", "decision"]
+
 export const demoProject: Project = {
   id: "demo-market-entry",
   title: "Regional market entry validation",
@@ -148,6 +162,9 @@ export const demoProject: Project = {
     "The concept has internal support but limited direct evidence from prospective customers in the target region.",
   outcome:
     "A defendable go / revise / stop decision supported by customer and operational evidence.",
+  assumptions: sampleAssumptions,
+  successCriteria: sampleSuccessCriteria,
+  tags: sampleTags,
   targetDate: "2026-06-30",
   budget: "$12,000 validation budget",
   resources: "Product lead, researcher, part-time designer",
@@ -161,4 +178,7 @@ export const demoProject: Project = {
 export const cloneDemoPlan = () => ({
   phases: structuredClone(samplePhases),
   risks: structuredClone(sampleRisks),
+  assumptions: structuredClone(sampleAssumptions),
+  successCriteria: structuredClone(sampleSuccessCriteria),
+  tags: structuredClone(sampleTags),
 })

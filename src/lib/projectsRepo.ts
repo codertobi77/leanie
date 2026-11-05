@@ -21,6 +21,9 @@ function toRow(project: Project, userId: string) {
     status: project.status,
     phases: project.phases,
     risks: project.risks,
+    assumptions: project.assumptions ?? [],
+    success_criteria: project.successCriteria ?? [],
+    tags: project.tags ?? [],
     created_at: project.createdAt,
     updated_at: project.updatedAt,
   }
@@ -41,6 +44,9 @@ function fromRow(row: any): Project {
     status: row.status,
     phases: asArray<Phase>(row.phases),
     risks: asArray<Risk>(row.risks),
+    assumptions: asArray<string>(row.assumptions),
+    successCriteria: asArray<string>(row.success_criteria),
+    tags: asArray<string>(row.tags),
   }
 }
 

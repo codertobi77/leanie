@@ -40,6 +40,9 @@ export interface Project {
   status: ProjectStatus
   phases: Phase[]
   risks: Risk[]
+  assumptions?: string[]
+  successCriteria?: string[]
+  tags?: string[]
 }
 
 export interface ProjectFormData {
