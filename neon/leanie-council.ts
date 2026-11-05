@@ -9,8 +9,8 @@ export default async function leanieCouncil(request: Request): Promise<Response>
   const apiKey = process.env.NVIDIA_NIM_API_KEY || "";
   const baseUrl = (process.env.NVIDIA_NIM_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/+$/, "");
   const models = {
-    strategic: process.env.LEANIE_GLM_MODEL || "z-ai/glm-5.3-flash",
-    synthesis: process.env.LEANIE_ARBITER_MODEL || "z-ai/glm-5.3-flash",
+    strategic: process.env.LEANIE_GLM_MODEL || "nvidia/nemotron-3.5-bolt-e4b",
+    synthesis: process.env.LEANIE_ARBITER_MODEL || "nvidia/nemotron-3.5-bolt-e4b",
   };
 
   if (!apiKey) {
@@ -27,19 +27,23 @@ export default async function leanieCouncil(request: Request): Promise<Response>
           signal: controller.signal,
           method: "POST",
           headers,
-          body: JSON.stringify({ model, temperature: 0.3, max_tokens: 400, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
+          body: JSON.stringify({ model, temperature: 0.2, max_tokens: 1200, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
         });
         if (!res.ok) throw new Error(`NVIDIA NIM ${res.status}: ${(await res.text()).slice(0, 300)}`);
         const data = await res.json();
-        return String(data?.choices?.[0]?.message?.content ?? "");
+        const message = data?.choices?.[0]?.message || {};
+        return String(message.content || message.reasoning_content || "");
       } finally {
         clearTimeout(timer);
       }
     }
     const replyStrategic = await chat(models.strategic, "Return JSON only: {phases:[{title,objective,tasks:[{title,description,priority:'High'|'Medium'|'Low',duration,dependency,resource,deliverable}]}, risks:[{title,likelihood:'Low'|'Medium'|'High',mitigation}]}", JSON.stringify(brief));
     const strategic = parseJson(replyStrategic) ?? { phases: [], risks: [] };
-    const replySynthesis = await chat(models.synthesis, "Return JSON only with final {phases,risk[]}.", JSON.stringify({ brief, strategic }));
-    const parsed = parseJson(replySynthesis) ?? strategic;
+    // The strategic output already contains the phases/tasks and risks.
+    // A second free-model synthesis pass can omit task details, so we use
+    // the strategic result as the actionable final plan.
+    const parsed = strategic;
+    parsed.risks = Array.isArray(parsed.risks) ? parsed.risks : (strategic.risks || []);
     const phases = Array.isArray(parsed.phases) ? parsed.phases.map((p: any, i: number) => ({
       id: `phase-${i + 1}`,
       title: p.title || `0${i + 1} — Phase`,
