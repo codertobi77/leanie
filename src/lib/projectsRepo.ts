@@ -1,5 +1,5 @@
 import type { Project, Phase, Risk } from "../types"
-import { supabase } from "./supabase"
+import { neonClient as supabase } from "./neon"
 
 const STORAGE_KEY = "leanie-projects-v1"
 

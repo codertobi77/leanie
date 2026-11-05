@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
-import { supabase } from "./supabase"
+import { neonClient as supabase } from "./neon"
 
 export interface AuthUser {
   id: string

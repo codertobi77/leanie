@@ -54,7 +54,7 @@ import {
 import { analysts, cloneDemoPlan, demoProject } from "./data"
 import type { Phase, Project, ProjectFormData, Screen, Task } from "./types"
 import { useAuth } from "./lib/auth"
-import { hasSupabase, requireSupabase, supabase } from "./lib/supabase"
+import { hasNeon, requireNeon, neonClient } from "./lib/neon"
 import { loadProjects, saveProject, removeProject } from "./lib/projectsRepo"
 
 const STORAGE_KEY = "leanie-projects-v1"
@@ -1208,10 +1208,19 @@ function CouncilScreen({
   useEffect(() => {
     let cancelled = false
     const run = async () => {
-      if (!supabase || !auth.user) return
+      if (!neonClient || !auth.user) return
+      const baseUrl = import.meta.env.VITE_NEON_FUNCTION_COUNCIL_BASE_URL as string | undefined
+      if (!baseUrl) return
       try {
-        const { data, error } = await supabase.functions.invoke("leanie-council", {
-          body: {
+        const { data: sessionData } = await neonClient.auth.getSession()
+        const token = (sessionData as any)?.session?.access_token
+        const response = await fetch(baseUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
             title: project.title,
             objective: project.objective,
             context: project.context,
@@ -1219,10 +1228,11 @@ function CouncilScreen({
             targetDate: project.targetDate,
             budget: project.budget,
             resources: project.resources,
-          },
+          }),
         })
-        if (!cancelled && !error) setResult(data)
-        if (!cancelled && error) setFailed(true)
+        const data = await response.json()
+        if (!cancelled && response.ok && !data.error) setResult(data)
+        if (!cancelled && (!response.ok || data.error)) setFailed(true)
       } catch {
         if (!cancelled) setFailed(true)
       }
@@ -1628,64 +1638,34 @@ function PlanScreen({
     }))
     notify("info", "Task added", "The new task is ready to edit.")
   }
-  const exportToSupabase = async (type: "md" | "csv") => {
-    if (!supabase) {
-      notify("error", "Supabase unavailable", "Configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.")
+  const exportToNeon = async (type: "md" | "csv") => {
+    const baseUrl = import.meta.env.VITE_NEON_FUNCTION_STORAGE_BASE_URL as string | undefined
+    if (!baseUrl) {
+      notify("info", "Storage unavailable", "Configure the Neon storage function first.")
       return
     }
-    const { data: sessionData } = await supabase.auth.getSession()
-    const user = sessionData.session?.user
+    if (!neonClient) {
+      notify("error", "Neon unavailable", "Configure the Neon Auth and Data API URLs first.")
+      return
+    }
+    const { data: sessionData } = await neonClient.auth.getSession()
+    const user = (sessionData as any)?.session?.user
     if (!user) {
-      notify("info", "Sign in required", "Sign in to store exports in Supabase.")
+      notify("info", "Sign in required", "Sign in to store exports in Neon.")
       return
     }
     try {
-      let content = ""
-      let mime = "text/markdown"
-      if (type === "md")
-        content = `# ${project.title}\n\n${project.objective}\n\n${project.phases.map((p) => `## ${p.title}\n${p.objective}\n\n${p.tasks.map((t) => `- **${t.title}** — ${t.description} (${t.priority}, ${t.duration})`).join("\n")}`).join("\n\n")}`
-      else {
-        mime = "text/csv"
-        content = [
-          "Phase,Task,Priority,Duration,Dependency,Resource,Deliverable",
-          ...project.phases.flatMap((p) =>
-            p.tasks.map((t) =>
-              [
-                p.title,
-                t.title,
-                t.priority,
-                t.duration,
-                t.dependency,
-                t.resource,
-                t.deliverable,
-              ]
-                .map((v) => `"${v.replace(/"/g, '""')}"`)
-              .join(","),
-            ),
-          ),
-        ].join("\n")
-      }
       const ext = type === "md" ? "md" : "csv"
       const path = `${user.id}/${project.id}-${Date.now()}.${ext}`
-      const { error: uploadError } = await supabase.storage
-        .from("leanie-exports")
-        .upload(path, new Blob([content], { type: mime }), { upsert: false })
-      if (uploadError) throw uploadError
-      const { data: signed } = await supabase.storage
-        .from("leanie-exports")
-        .createSignedUrl(path, 3600)
-      await supabase.from("leanie_exports").insert({
+      const { data: saved, error } = await neonClient.from("leanie_exports").insert({
         user_id: user.id,
         project_id: project.id,
         format: type,
         storage_path: path,
-      })
+      }).select().single()
+      if (error) throw error
       setExportOpen(false)
-      notify(
-        "success",
-        "Export stored",
-        signed?.signedUrl ?? "The file was saved to Supabase Storage.",
-      )
+      notify("success", "Export recorded", `Neon object storage planned path: ${saved?.storage_path ?? path}`)
     } catch (error) {
       notify("error", "Storage export failed", String(error))
     }
@@ -1855,7 +1835,7 @@ function PlanScreen({
                 <button onClick={() => exportFile("csv")}>
                   Task data <span>.csv</span>
                 </button>
-                <button onClick={() => exportToSupabase("md")}>
+                <button onClick={() => exportToNeon("md")}>
                   Cloud copy <span>.md</span>
                 </button>
                 <button onClick={printPlan}>
@@ -2243,42 +2223,42 @@ function SettingsScreen({
           </select>
         </Setting>
         <Setting
-          icon={hasSupabase ? CheckCircle2 : Bot}
+          icon={hasNeon ? CheckCircle2 : Bot}
           title="Backend configuration"
           description={
-            hasSupabase
+            hasNeon
               ? "Supabase is configured for auth, project storage, council requests, and file exports."
               : "Supabase is not configured. Projects remain in this browser."
           }
         >
-          <span className={`status ${hasSupabase ? "status-green" : "status-amber"}`}>
-            {hasSupabase ? "Connected" : "Local only"}
+          <span className={`status ${hasNeon ? "status-green" : "status-amber"}`}>
+            {hasNeon ? "Connected" : "Local only"}
           </span>
         </Setting>
         <Setting
           icon={Bot}
           title="AI configuration"
           description={
-            hasSupabase
+            hasNeon
               ? "Council requests are routed through the leanie-council Supabase Edge Function. Secrets remain on Supabase."
               : "Council responses use deterministic demonstration data. No AI provider is connected."
           }
         >
-          <span className={`status ${hasSupabase ? "status-blue" : "status-amber"}`}>
-            {hasSupabase ? "Supabase function" : "Simulation only"}
+          <span className={`status ${hasNeon ? "status-blue" : "status-amber"}`}>
+            {hasNeon ? "Supabase function" : "Simulation only"}
           </span>
         </Setting>
         <Setting
           icon={ShieldAlert}
           title="Privacy & AI usage"
           description={
-            hasSupabase
+            hasNeon
               ? "Authenticated projects are stored in Supabase with row-level security. Anonymous sessions use this browser."
               : "Projects are stored in your browser’s localStorage and are not synchronized or sent to a server."
           }
         >
-          <span className={`status ${hasSupabase ? "status-green" : "status-green"}`}>
-            {hasSupabase ? "RLS enabled" : "Local only"}
+          <span className={`status ${hasNeon ? "status-green" : "status-green"}`}>
+            {hasNeon ? "RLS enabled" : "Local only"}
           </span>
         </Setting>
         <Setting
@@ -2472,8 +2452,8 @@ export default function App() {
     navigate("council")
     notify(
       "info",
-      hasSupabase ? "Council request sent" : "Council simulation started",
-      hasSupabase
+      hasNeon ? "Council request sent" : "Council simulation started",
+      hasNeon
         ? "The Council request is being processed by Supabase."
         : "Three specialist perspectives will analyze in parallel.",
     )
