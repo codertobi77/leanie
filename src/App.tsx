@@ -1664,6 +1664,8 @@ function PlanScreen({
   const [dragOverTask, setDragOverTask] = useState<number | null>(null)
   const [newRiskTitle, setNewRiskTitle] = useState("")
   const [newSuccessCriterion, setNewSuccessCriterion] = useState("")
+  const [replayStep, setReplayStep] = useState("strategic")
+  const [replaying, setReplaying] = useState(false)
   const allTasks = project.phases.flatMap((phase) => phase.tasks)
   const completedTasks = allTasks.filter((task) => task.completed).length
   const progress = allTasks.length
@@ -1812,6 +1814,64 @@ function PlanScreen({
   const putSuccessCriterion = (index: number, value: string) => {
     const next = (project.successCriteria ?? []).map((item, itemIndex) => (itemIndex === index ? value : item))
     setSuccessCriteria(next)
+  }
+
+  const replayIsolatedStep = async () => {
+    const baseUrl = import.meta.env.VITE_NEON_FUNCTION_COUNCIL_BASE_URL as string | undefined
+    if (!baseUrl || !neonClient) {
+      notify("error", "Neon unavailable", "Configure the Neon Auth and Function URLs first.")
+      return
+    }
+    setReplaying(true)
+    try {
+      const { data: sessionData } = await neonClient.auth.getSession()
+      const token = (sessionData as any)?.session?.access_token
+      const response = await fetch(baseUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          step: replayStep,
+          title: project.title,
+          objective: project.objective,
+          context: project.context,
+          outcome: project.outcome,
+          targetDate: project.targetDate,
+          budget: project.budget,
+          resources: project.resources,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || data.error) throw new Error(data.error ?? "Council request failed")
+      const updated = {
+        ...project,
+        status: project.status,
+        updatedAt: new Date().toISOString(),
+        phases:
+          Array.isArray(data.phases) && data.phases.length > 0 ? data.phases : project.phases,
+        risks: Array.isArray(data.risks) && data.risks.length > 0 ? data.risks : project.risks,
+        assumptions:
+          Array.isArray(data.assumptions) && data.assumptions.length > 0
+            ? data.assumptions
+            : project.assumptions,
+        successCriteria:
+          Array.isArray(data.successCriteria) && data.successCriteria.length > 0
+            ? data.successCriteria
+            : project.successCriteria,
+      }
+      updateProject(updated)
+      notify(
+        "success",
+        `${replayStep} step replayed`,
+        "The selected Council step was refreshed without rebuilding the whole plan.",
+      )
+    } catch (error) {
+      notify("error", "Isolated replay failed", String(error).slice(0, 240))
+    } finally {
+      setReplaying(false)
+    }
   }
 
   const exportToNeon = async (type: "md" | "csv") => {
@@ -2228,6 +2288,34 @@ function PlanScreen({
               />
               <button type="button" onClick={addSuccessCriterion} className="btn-secondary">
                 <Plus size={13} />
+              </button>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <h3 className="text-sm font-semibold">Isolated Council step</h3>
+            <p className="mt-2 text-[11px] leading-5 text-slate-500">
+              Re-run only one Council step and patch the completed plan.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <select
+                value={replayStep}
+                onChange={(event) => setReplayStep(event.target.value)}
+                className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+                aria-label="Council step selector"
+              >
+                <option value="strategic">Strategic Analyst</option>
+                <option value="feasibility">Feasibility Analyst</option>
+                <option value="critique">Critical Reviewer</option>
+                <option value="arbiter">Arbiter / synthesis</option>
+                <option value="full">Full Council</option>
+              </select>
+              <button
+                type="button"
+                onClick={replayIsolatedStep}
+                disabled={replaying}
+                className="btn-secondary"
+              >
+                {replaying ? "Running..." : "Replay selected step"}
               </button>
             </div>
           </div>

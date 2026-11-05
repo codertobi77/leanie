@@ -5,6 +5,10 @@ export default async function leanieCouncil(request: Request): Promise<Response>
 
   const brief = await request.json().catch(() => null);
   if (!brief) return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400, headers: cors });
+  const requestedStep = String(brief.step || "full").toLowerCase();
+  if (!["full", "strategic", "feasibility", "critique", "arbiter"].includes(requestedStep)) {
+    return new Response(JSON.stringify({ error: "Unknown Council step" }), { status: 400, headers: cors });
+  }
 
   const apiKey = process.env.NVIDIA_NIM_API_KEY || "";
   const baseUrl = (process.env.NVIDIA_NIM_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/+$/, "");
@@ -66,7 +70,7 @@ export default async function leanieCouncil(request: Request): Promise<Response>
     })) : (strategic.risks || []);
     const assumptions = Array.isArray(parsed.assumptions) ? parsed.assumptions : (strategic.assumptions || []);
     const successCriteria = Array.isArray(parsed.successCriteria) ? parsed.successCriteria : (strategic.successCriteria || []);
-    return new Response(JSON.stringify({ mode: "live", phases, risks, assumptions, successCriteria, analysis: { strategic: parseJson(replyStrategic) } }), { headers: cors });
+    return new Response(JSON.stringify({ mode: "live", step: requestedStep, phases, risks, assumptions, successCriteria, analysis: { strategic: parseJson(replyStrategic) } }), { headers: cors });
   } catch (error) {
     return new Response(JSON.stringify(demoResult(brief, true, String(error).slice(0, 300))), { headers: cors });
   }
