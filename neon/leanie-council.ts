@@ -41,14 +41,37 @@ export default async function leanieCouncil(request: Request): Promise<Response>
         clearTimeout(timer);
       }
     }
-    const replyStrategic = await chat(models.strategic, "Return JSON only with fields: phases array {title,objective,tasks {title,description,priority,duration,dependency,resource,deliverable}}; risks array {title,likelihood,mitigation}; assumptions string[]; successCriteria string[]. No markdown.", JSON.stringify(brief));
-    const strategic = parseJson(replyStrategic) ?? { phases: [], risks: [] };
-    // The strategic output already contains the phases/tasks and risks.
-    // A second free-model synthesis pass can omit task details, so we use
-    // the strategic result as the actionable final plan.
-    const parsed = strategic;
-    parsed.risks = Array.isArray(parsed.risks) ? parsed.risks : (strategic.risks || []);
-    const phases = Array.isArray(parsed.phases) ? parsed.phases.map((p: any, i: number) => ({
+    if (requestedStep === "feasibility") {
+    const reply = await chat(models.strategic, "Return JSON only with fields: feasible (boolean), notes (string), risks array {title,likelihood,mitigation}. No markdown.", JSON.stringify(brief));
+    const feasibility = parseJson(reply) ?? { feasible: true, notes: "", risks: [] };
+    return new Response(JSON.stringify({
+      mode: "live",
+      step: requestedStep,
+      note: "feasibility",
+      feasible: feasibility.feasible ?? true,
+      notes: feasibility.notes || "",
+      risks: Array.isArray(feasibility.risks) ? feasibility.risks.map((r: any) => ({ title: r.title || "Risk", likelihood: ["Low", "Medium", "High"].includes(r.likelihood) ? r.likelihood : "Medium", mitigation: r.mitigation || "" })) : [],
+      analysis: { feasibility },
+    }), { headers: cors });
+  }
+
+  if (requestedStep === "critique") {
+    const reply = await chat(models.strategic, "Return JSON only with fields: assumptions string[] and risks array {title,likelihood,mitigation}. No markdown.", JSON.stringify(brief));
+    const critique = parseJson(reply) ?? { assumptions: [], risks: [] };
+    return new Response(JSON.stringify({
+      mode: "live",
+      step: requestedStep,
+      "type": "critique",
+      assumptions: Array.isArray(critique.assumptions) ? critique.assumptions : [],
+      risks: Array.isArray(critique.risks) ? critique.risks.map((r: any) => ({ title: r.title || "Risk", likelihood: ["Low", "Medium", "High"].includes(r.likelihood) ? r.likelihood : "Medium", mitigation: r.mitigation || "" })) : [],
+      analysis: { critique },
+    }), { headers: cors });
+  }
+
+  const replyStrategic = await chat(models.strategic, "Return JSON only with fields: phases array {title,objective,tasks {title,description,priority,duration,dependency,resource,deliverable}}; risks array {title,likelihood,mitigation}; assumptions string[]; successCriteria string[]. No markdown.", JSON.stringify(brief));
+  const strategic = parseJson(replyStrategic) ?? { phases: [], risks: [], assumptions: [], successCriteria: [] };
+  const parsed = strategic;
+  const phases = Array.isArray(parsed.phases) ? parsed.phases.map((p: any, i: number) => ({
       id: `phase-${i + 1}`,
       title: p.title || `0${i + 1} — Phase`,
       objective: p.objective || "",
@@ -62,15 +85,16 @@ export default async function leanieCouncil(request: Request): Promise<Response>
         resource: t.resource || "Unassigned",
         deliverable: t.deliverable || "Defined output",
       })) : [],
-    })) : [];
-    const risks = Array.isArray(parsed.risks) ? parsed.risks.map((r: any) => ({
+  })) : [];
+  const risks = Array.isArray(parsed.risks) ? parsed.risks.map((r: any) => ({
       title: r.title || "Risk",
       likelihood: ["Low", "Medium", "High"].includes(r.likelihood) ? r.likelihood : "Medium",
       mitigation: r.mitigation || "",
-    })) : (strategic.risks || []);
-    const assumptions = Array.isArray(parsed.assumptions) ? parsed.assumptions : (strategic.assumptions || []);
-    const successCriteria = Array.isArray(parsed.successCriteria) ? parsed.successCriteria : (strategic.successCriteria || []);
-    return new Response(JSON.stringify({ mode: "live", step: requestedStep, phases, risks, assumptions, successCriteria, analysis: { strategic: parseJson(replyStrategic) } }), { headers: cors });
+  })) : [];
+  const assumptions = Array.isArray(parsed.assumptions) ? parsed.assumptions : [];
+  const successCriteria = Array.isArray(parsed.successCriteria) ? parsed.successCriteria : [];
+  return new Response(JSON.stringify({ mode: "live", step: requestedStep, phases, risks, assumptions, successCriteria, analysis: { strategic: parseJson(replyStrategic) } }), { headers: cors });
+
   } catch (error) {
     return new Response(JSON.stringify(demoResult(brief, true, String(error).slice(0, 300))), { headers: cors });
   }
