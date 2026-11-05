@@ -2192,15 +2192,29 @@ function PlanScreen({
                         index={index}
                         total={phase.tasks.length}
                         draggable
-                        onDragStart={() => setDraggingTask({ phaseId: phase.id, index })}
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = "move"
+                          event.dataTransfer.setData(
+                            "text/plain",
+                            JSON.stringify({ phaseId: phase.id, index }),
+                          )
+                          setDraggingTask({ phaseId: phase.id, index })
+                        }}
                         onDragOver={(event) => {
                           event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
                           if (draggingTask?.phaseId === phase.id) setDragOverTask(index)
                         }}
-                        onDrop={() => {
-                          if (draggingTask?.phaseId === phase.id && draggingTask.index !== index) {
-                            reorderTask(phase.id, draggingTask.index, index)
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          let from = draggingTask?.index
+                          try {
+                            const parsed = JSON.parse(event.dataTransfer.getData("text/plain"))
+                            if (typeof parsed.index === "number") from = parsed.index
+                          } catch {
+                            // ignore malformed drop data
                           }
+                          if (typeof from === "number" && from !== index) reorderTask(phase.id, from, index)
                           setDraggingTask(null)
                           setDragOverTask(null)
                         }}
@@ -2413,9 +2427,9 @@ function TaskRow({
   move: (d: -1 | 1) => void
   toggle: () => void
   draggable?: boolean
-  onDragStart?: () => void
+  onDragStart?: (event: React.DragEvent<HTMLDivElement>) => void
   onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void
-  onDrop?: () => void
+  onDrop?: (event: React.DragEvent<HTMLDivElement>) => void
   onDragEnd?: () => void
   className?: string
 }) {
@@ -2522,6 +2536,7 @@ function TaskRow({
           <label className="mini-field">
             Dependency
             <input
+              aria-label="Task dependency"
               value={task.dependency}
               onChange={(e) => update({ dependency: e.target.value })}
             />
