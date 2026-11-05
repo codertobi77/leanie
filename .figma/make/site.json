@@ -1,0 +1,10 @@
+{
+  "description": "Turn project ideas into realistic, actionable plans with AI Council analysis that evaluates feasibility, challenges assumptions, and highlights risks.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

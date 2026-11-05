@@ -1,0 +1,2360 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  AlertCircle,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Bot,
+  BrainCircuit,
+  CalendarDays,
+  Command,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  CircleDot,
+  Clock3,
+  Download,
+  FileText,
+  Gauge,
+  GripVertical,
+  Home,
+  Info,
+  Languages,
+  LayoutDashboard,
+  Lightbulb,
+  ListChecks,
+  Menu,
+  Moon,
+  MoreHorizontal,
+  Plus,
+  Rocket,
+  Scale,
+  Search,
+  Settings,
+  ShieldAlert,
+  Sparkles,
+  Sun,
+  Target,
+  Trash2,
+  X,
+  Zap,
+} from "lucide-react"
+import { Brand } from "./components/Brand"
+import { CommandPalette } from "./components/CommandPalette"
+import { ConfirmationDialog } from "./components/ConfirmationDialog"
+import { CouncilDiagram, type CouncilStage } from "./components/CouncilDiagram"
+import {
+  ToastViewport,
+  type ToastItem,
+  type ToastKind,
+} from "./components/Toast"
+import { analysts, cloneDemoPlan, demoProject } from "./data"
+import type { Phase, Project, ProjectFormData, Screen, Task } from "./types"
+
+const STORAGE_KEY = "leanie-projects-v1"
+const blankForm: ProjectFormData = {
+  title: "",
+  objective: "",
+  context: "",
+  outcome: "",
+  targetDate: "",
+  budget: "",
+  resources: "",
+}
+const navItems: { id: Screen; label: string; icon: typeof Home }[] = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "projects", label: "My Projects", icon: FileText },
+  { id: "new", label: "New Project", icon: Plus },
+  { id: "settings", label: "Settings", icon: Settings },
+]
+
+function fmtDate(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value))
+}
+
+function StatusPill({ status }: { status: Project["status"] }) {
+  const cls =
+    status === "Validated"
+      ? "status-green"
+      : status === "Analyzing"
+        ? "status-blue"
+        : status === "Plan ready"
+          ? "status-purple"
+          : "status-gray"
+  return (
+    <span className={`status ${cls}`}>
+      <span className="size-1.5 rounded-full bg-current" />
+      {status}
+    </span>
+  )
+}
+
+function AnimatedNumber({ value }: { value: number }) {
+  const [display, setDisplay] = useState(0)
+  useEffect(() => {
+    const start = performance.now()
+    let frame = 0
+    const tick = (time: number) => {
+      const progress = Math.min((time - start) / 500, 1)
+      setDisplay(Math.round(value * (1 - Math.pow(1 - progress, 3))))
+      if (progress < 1) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [value])
+  return <>{display}</>
+}
+
+function Landing({ enter }: { enter: (screen?: Screen) => void }) {
+  return (
+    <div className="min-h-screen overflow-hidden bg-[#f8f9fc] text-[#101827]">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#101827]/95 text-white backdrop-blur-xl">
+        <div className="mx-auto flex h-18 max-w-[1240px] items-center justify-between px-5 lg:px-8">
+          <Brand light />
+          <nav className="hidden items-center gap-8 text-sm text-slate-300 md:flex">
+            <a href="#process" className="hover:text-white">
+              How it works
+            </a>
+            <a href="#council" className="hover:text-white">
+              AI Council
+            </a>
+            <a href="#benefits" className="hover:text-white">
+              Benefits
+            </a>
+          </nav>
+          <button
+            onClick={() => enter("overview")}
+            className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-[#101827] transition hover:bg-blue-50"
+          >
+            Get started
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section className="relative bg-[#101827] pb-24 pt-36 text-white lg:pb-32 lg:pt-44">
+          <div className="hero-grid absolute inset-0 opacity-40" />
+          <div className="pointer-events-none absolute left-[8%] top-40 size-72 rounded-full bg-blue-500/10 blur-3xl" />
+          <div className="relative mx-auto max-w-[1240px] px-5 lg:px-8">
+            <div className="mx-auto max-w-4xl text-center">
+              <div className="eyebrow mx-auto border-white/10 bg-white/5 text-blue-200">
+                <Sparkles size={13} /> Lean Intelligence Engine
+              </div>
+              <h1 className="mt-7 text-[clamp(3.2rem,7vw,6.6rem)] font-medium leading-[0.94] tracking-[-0.065em]">
+                Better thinking.
+                <br />
+                <span className="text-[#9bb2ff]">Clearer plans.</span>
+                <br />
+                Smarter execution.
+              </h1>
+              <p className="mx-auto mt-7 max-w-2xl text-lg leading-8 text-slate-300">
+                Turn an idea into a realistic plan through a Council of
+                specialized AI perspectives—challenged, compared, and
+                synthesized for action.
+              </p>
+              <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
+                <button
+                  onClick={() => enter("new")}
+                  className="btn-light group"
+                >
+                  Start planning{" "}
+                  <ArrowRight
+                    size={16}
+                    className="transition group-hover:translate-x-0.5"
+                  />
+                </button>
+                <a href="#process" className="btn-dark-outline">
+                  Discover how it works <ArrowDown size={15} />
+                </a>
+              </div>
+              <p className="mt-4 text-xs text-slate-500">
+                Interactive prototype · Simulated AI analysis
+              </p>
+            </div>
+
+            <div className="relative mx-auto mt-16 max-w-5xl rounded-[24px] border border-white/10 bg-[#172338] p-2 shadow-[0_40px_100px_rgba(0,0,0,.4)]">
+              <div className="rounded-[18px] border border-white/8 bg-[#111c2d] p-5 sm:p-8">
+                <div className="flex items-center justify-between border-b border-white/8 pb-5">
+                  <div className="text-left">
+                    <p className="text-xs text-slate-500">COUNCIL SESSION</p>
+                    <p className="mt-1 font-medium">Market entry validation</p>
+                  </div>
+                  <span className="status border-blue-400/20 bg-blue-400/10 text-blue-200">
+                    <span className="pulse-dot" />
+                    Analyzing
+                  </span>
+                </div>
+                <div className="mt-6 grid gap-3 md:grid-cols-3">
+                  {analysts.map((a, index) => (
+                    <div
+                      key={a.role}
+                      className="rounded-xl border border-white/8 bg-white/[.035] p-4 text-left"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="grid size-8 place-items-center rounded-lg bg-blue-400/10 text-blue-300">
+                          <BrainCircuit size={15} />
+                        </span>
+                        <CheckCircle2
+                          size={16}
+                          className={
+                            index < 2 ? "text-emerald-400" : "text-slate-600"
+                          }
+                        />
+                      </div>
+                      <p className="mt-7 text-sm font-medium">{a.role}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-400">
+                        {a.description}
+                      </p>
+                      <div className="mt-4 h-1 overflow-hidden rounded-full bg-white/5">
+                        <div
+                          className="h-full rounded-full bg-[#648bff]"
+                          style={{ width: index < 2 ? "100%" : "64%" }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mx-auto my-3 h-7 w-px bg-gradient-to-b from-blue-400/50 to-violet-400/50" />
+                <div className="mx-auto flex max-w-lg items-center gap-4 rounded-xl border border-violet-400/20 bg-violet-400/8 p-4 text-left">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-violet-400/15 text-violet-300">
+                    <Scale size={18} />
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium">Arbiter synthesis</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Comparing evidence, resolving trade-offs, and forming a
+                      recommendation.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="process" className="section-wrap">
+          <div className="section-heading">
+            <span>01 / PROCESS</span>
+            <h2>
+              From open question
+              <br />
+              to executable direction.
+            </h2>
+            <p>
+              Leanie introduces productive tension before commitment, then
+              translates the strongest reasoning into practical steps.
+            </p>
+          </div>
+          <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 md:grid-cols-3">
+            {([
+              [
+                Lightbulb,
+                "01",
+                "Describe your idea",
+                "Capture the objective, context, desired outcome, and the constraints that shape reality.",
+              ],
+              [
+                BrainCircuit,
+                "02",
+                "Challenge it with the Council",
+                "Independent analytical roles test strategy, feasibility, and hidden assumptions.",
+              ],
+              [
+                ListChecks,
+                "03",
+                "Get an actionable plan",
+                "The Arbiter resolves disagreements and creates an editable phased plan.",
+              ],
+            ] as const).map(([Icon, n, title, body]) => (
+              <div key={String(n)} className="bg-white p-7 lg:p-9">
+                <div className="flex items-center justify-between">
+                  <span className="grid size-11 place-items-center rounded-xl bg-[#eef2ff] text-[#526fd2]">
+                    <Icon size={20} />
+                  </span>
+                  <span className="font-mono text-xs text-slate-400">{n}</span>
+                </div>
+                <h3 className="mt-14 text-xl font-semibold tracking-tight">
+                  {title}
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-slate-600">{body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section
+          id="council"
+          className="bg-[#101827] py-24 text-white lg:py-32"
+        >
+          <div className="mx-auto grid max-w-[1240px] gap-14 px-5 lg:grid-cols-[.8fr_1.2fr] lg:px-8">
+            <div>
+              <span className="section-kicker-dark">02 / THE COUNCIL</span>
+              <h2 className="mt-6 text-4xl font-medium leading-tight tracking-[-0.045em] sm:text-5xl">
+                One idea.
+                <br />
+                Multiple lenses.
+                <br />
+                <span className="text-[#9bb2ff]">Better judgment.</span>
+              </h2>
+              <p className="mt-6 max-w-md leading-7 text-slate-400">
+                Not a chatbot. A structured reasoning process in which
+                complementary perspectives work independently before conclusions
+                are synthesized.
+              </p>
+            </div>
+            <div className="space-y-3">
+              {([
+                [
+                  Target,
+                  "Strategic Analyst",
+                  "Does this direction make sense?",
+                  "Tests objectives, alignment, relevance, and strategic coherence.",
+                ],
+                [
+                  Gauge,
+                  "Feasibility Analyst",
+                  "Can this work in practice?",
+                  "Evaluates technical, operational, financial, and delivery realities.",
+                ],
+                [
+                  ShieldAlert,
+                  "Critical Reviewer",
+                  "What are we missing?",
+                  "Challenges assumptions, contradictions, blind spots, and overlooked risk.",
+                ],
+                [
+                  Scale,
+                  "Arbiter",
+                  "What should we do next?",
+                  "Weighs evidence and disagreements to produce a consolidated recommendation.",
+                ],
+              ] as const).map(([Icon, title, question, body], i) => (
+                <div
+                  key={String(title)}
+                  className={`group grid gap-4 rounded-xl border p-5 sm:grid-cols-[auto_1fr_auto] sm:items-center ${
+                    i === 3
+                      ? "border-violet-400/30 bg-violet-400/10"
+                      : "border-white/8 bg-white/[.035]"
+                  }`}
+                >
+                  <span
+                    className={`grid size-10 place-items-center rounded-lg ${
+                      i === 3
+                        ? "bg-violet-400/15 text-violet-300"
+                        : "bg-white/5 text-blue-300"
+                    }`}
+                  >
+                    <Icon size={18} />
+                  </span>
+                  <div>
+                    <div className="flex flex-wrap items-baseline gap-x-3">
+                      <h3 className="font-medium">{title}</h3>
+                      <span className="text-xs text-slate-500">{question}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-400">{body}</p>
+                  </div>
+                  <span className="hidden font-mono text-xs text-slate-600 sm:block">
+                    0{i + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="benefits" className="section-wrap">
+          <div className="section-heading">
+            <span>03 / OUTCOMES</span>
+            <h2>
+              Move forward with
+              <br />
+              eyes open.
+            </h2>
+          </div>
+          <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+            {([
+              [
+                Gauge,
+                "Feasibility",
+                "Understand what is achievable before committing resources.",
+              ],
+              [
+                ShieldAlert,
+                "Risk awareness",
+                "Surface fragile assumptions while they are still inexpensive to address.",
+              ],
+              [
+                CircleDot,
+                "Clarity",
+                "Separate evidence, assumptions, disagreements, and recommendations.",
+              ],
+              [
+                Rocket,
+                "Execution",
+                "Translate sound reasoning into sequenced work with clear outcomes.",
+              ],
+            ] as const).map(([Icon, title, body]) => (
+              <div
+                key={String(title)}
+                className="border-t border-slate-300 pt-5"
+              >
+                <Icon size={20} className="text-[#648bff]" />
+                <h3 className="mt-8 font-semibold">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="px-5 pb-20 lg:px-8">
+          <div className="mx-auto max-w-[1240px] rounded-[24px] bg-[#e9edff] px-6 py-16 text-center sm:px-12 lg:py-20">
+            <p className="text-xs font-semibold tracking-[.18em] text-[#526fd2]">
+              START WITH BETTER QUESTIONS
+            </p>
+            <h2 className="mx-auto mt-5 max-w-3xl text-4xl font-medium tracking-[-.045em] sm:text-5xl">
+              Your idea deserves more than a first answer.
+            </h2>
+            <p className="mx-auto mt-5 max-w-xl text-slate-600">
+              Challenge it from every angle, then build a plan grounded in what
+              the Council discovers.
+            </p>
+            <button onClick={() => enter("new")} className="btn-primary mt-8">
+              Start planning <ArrowRight size={16} />
+            </button>
+          </div>
+        </section>
+      </main>
+      <footer className="border-t border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-[1240px] flex-col gap-5 px-5 py-8 sm:flex-row sm:items-center sm:justify-between lg:px-8">
+          <Brand />
+          <p className="text-xs text-slate-500">
+            A product concept by LiteTECH Startup · © 2026
+          </p>
+        </div>
+      </footer>
+    </div>
+  )
+}
+
+function Sidebar({
+  screen,
+  navigate,
+  mobileOpen,
+  close,
+  collapsed,
+  toggleCollapsed,
+  openCommand,
+}: {
+  screen: Screen
+  navigate: (s: Screen) => void
+  mobileOpen: boolean
+  close: () => void
+  collapsed: boolean
+  toggleCollapsed: () => void
+  openCommand: () => void
+}) {
+  return (
+    <>
+      {mobileOpen && (
+        <button
+          className="fixed inset-0 z-40 bg-slate-950/35 lg:hidden"
+          aria-label="Close navigation"
+          onClick={close}
+        />
+      )}
+      <aside
+        className={`app-sidebar fixed inset-y-0 left-0 z-50 flex flex-col bg-[#101827] text-white lg:translate-x-0 ${
+          collapsed ? "is-collapsed" : ""
+        } ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+      >
+        <div className="flex h-20 items-center justify-between border-b border-white/8 px-5">
+          <div className="sidebar-brand">
+            <Brand light />
+          </div>
+          <button
+            onClick={close}
+            className="text-slate-400 lg:hidden"
+            aria-label="Close menu"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <nav className="flex-1 px-3 py-6">
+          <p className="sidebar-label px-3 pb-3 text-[10px] font-semibold tracking-[.18em] text-slate-600">
+            WORKSPACE
+          </p>
+          {navItems.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => {
+                navigate(id)
+                close()
+              }}
+              className={`sidebar-item ${
+                screen === id ||
+                (id === "projects" &&
+                  ["council", "results", "plan"].includes(screen))
+                  ? "sidebar-active"
+                  : ""
+              }`}
+            >
+              <Icon size={17} />
+              <span className="sidebar-label">{label}</span>
+              {id === "new" && (
+                <span className="sidebar-label ml-auto rounded bg-blue-400/10 px-1.5 py-0.5 text-[10px] text-blue-300">
+                  NEW
+                </span>
+              )}
+            </button>
+          ))}
+          <button
+            onClick={openCommand}
+            className="sidebar-item mt-4 border border-white/8"
+          >
+            <Search size={17} />
+            <span className="sidebar-label">Quick search</span>
+            <kbd className="sidebar-label ml-auto rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-slate-500">
+              ⌘K
+            </kbd>
+          </button>
+        </nav>
+        <div className="border-t border-white/8 p-4">
+          <div className="flex items-center gap-3 rounded-xl p-2">
+            <span className="grid size-9 place-items-center rounded-full bg-[#293a56] text-xs font-semibold">
+              LP
+            </span>
+            <div className="sidebar-label min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">Local prototype</p>
+              <p className="truncate text-xs text-slate-500">
+                Data stored in this browser
+              </p>
+            </div>
+            <MoreHorizontal size={16} className="text-slate-500" />
+          </div>
+          <button
+            onClick={toggleCollapsed}
+            className="sidebar-collapse hidden lg:flex"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <ChevronRight size={14} className={collapsed ? "" : "rotate-180"} />
+            <span className="sidebar-label">Collapse sidebar</span>
+          </button>
+        </div>
+      </aside>
+    </>
+  )
+}
+
+function AppHeader({
+  title,
+  menu,
+  action,
+}: {
+  title: string
+  menu: () => void
+  action?: React.ReactNode
+}) {
+  return (
+    <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-200/80 bg-[#f8f9fc]/90 px-5 backdrop-blur-lg lg:px-9">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={menu}
+          className="icon-button lg:hidden"
+          aria-label="Open navigation"
+        >
+          <Menu size={20} />
+        </button>
+        <h1 className="text-lg font-semibold tracking-[-.025em] text-slate-950">
+          {title}
+        </h1>
+      </div>
+      {action}
+    </header>
+  )
+}
+
+function Dashboard({
+  projects,
+  navigate,
+  select,
+}: {
+  projects: Project[]
+  navigate: (s: Screen) => void
+  select: (p: Project) => void
+}) {
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoading(false), 320)
+    return () => clearTimeout(timer)
+  }, [])
+  const recent = projects
+    .slice()
+    .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
+    .slice(0, 4)
+  if (loading) return <DashboardSkeleton />
+  return (
+    <div className="page">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm text-slate-500">Tuesday, March 17</p>
+          <h2 className="mt-2 text-3xl font-semibold tracking-[-.04em] text-slate-950 sm:text-4xl">
+            Good morning.
+          </h2>
+          <p className="mt-3 text-slate-600">
+            Turn your next open question into a defensible plan.
+          </p>
+        </div>
+        <button onClick={() => navigate("new")} className="btn-primary">
+          <Plus size={16} />
+          Create a project
+        </button>
+      </div>
+      <div className="mt-10 grid gap-4 sm:grid-cols-3">
+        <div className="metric-card">
+          <FileText size={18} />
+          <div>
+            <span>
+              <AnimatedNumber value={projects.length} />
+            </span>
+            <p>Total projects</p>
+          </div>
+        </div>
+        <div className="metric-card">
+          <ListChecks size={18} />
+          <div>
+            <span>
+              <AnimatedNumber
+                value={projects.filter((p) => p.status === "Plan ready").length}
+              />
+            </span>
+            <p>Plans ready</p>
+          </div>
+        </div>
+        <div className="metric-card">
+          <CheckCircle2 size={18} />
+          <div>
+            <span>
+              <AnimatedNumber
+                value={projects.filter((p) => p.status === "Validated").length}
+              />
+            </span>
+            <p>Validated</p>
+          </div>
+        </div>
+      </div>
+      <div className="mt-10 flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold text-slate-950">Recent projects</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Demonstration content and your locally saved projects.
+          </p>
+        </div>
+        <button onClick={() => navigate("projects")} className="text-button">
+          View all <ArrowRight size={14} />
+        </button>
+      </div>
+      {recent.length ? (
+        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
+          {recent.map((p, i) => (
+            <button
+              key={p.id}
+              onClick={() => select(p)}
+              className={`project-row ${i ? "border-t border-slate-100" : ""}`}
+            >
+              <span className="project-icon">
+                <FileText size={17} />
+              </span>
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block truncate text-sm font-medium text-slate-900">
+                  {p.title}
+                </span>
+                <span className="mt-1 block text-xs text-slate-500">
+                  Updated {fmtDate(p.updatedAt)}
+                </span>
+              </span>
+              <StatusPill status={p.status} />
+              <ChevronRight size={16} className="text-slate-400" />
+            </button>
+          ))}
+        </div>
+      ) : (
+        <EmptyState navigate={navigate} />
+      )}
+      <div className="mt-8 grid gap-4 lg:grid-cols-[1fr_.72fr]">
+        <section className="dashboard-panel">
+          <div className="panel-heading">
+            <div>
+              <h3>Recent activity</h3>
+              <p>Sample and locally generated project events.</p>
+            </div>
+            <Clock3 size={17} />
+          </div>
+          <div className="activity-timeline">
+            {recent.slice(0, 3).map((project, index) => (
+              <button key={project.id} onClick={() => select(project)}>
+                <span
+                  className={`activity-dot ${index === 0 ? "active" : ""}`}
+                />
+                <div>
+                  <strong>
+                    {project.status === "Validated"
+                      ? "Plan validated"
+                      : project.status === "Plan ready"
+                        ? "Council analysis completed"
+                        : "Project brief updated"}
+                  </strong>
+                  <p>{project.title}</p>
+                </div>
+                <time>{fmtDate(project.updatedAt)}</time>
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="dashboard-panel">
+          <div className="panel-heading">
+            <div>
+              <h3>Quick actions</h3>
+              <p>Continue your next decision.</p>
+            </div>
+            <Zap size={17} />
+          </div>
+          <div className="quick-actions">
+            <button onClick={() => navigate("new")}>
+              <span>
+                <Plus size={16} />
+              </span>
+              <div>
+                <strong>New Council session</strong>
+                <p>Challenge a project idea</p>
+              </div>
+              <ChevronRight size={15} />
+            </button>
+            <button onClick={() => navigate("projects")}>
+              <span>
+                <FileText size={16} />
+              </span>
+              <div>
+                <strong>Browse projects</strong>
+                <p>Review plans and analyses</p>
+              </div>
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        </section>
+      </div>
+      <div className="mt-8 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+        <Info size={17} className="mt-0.5 shrink-0 text-blue-600" />
+        <p className="text-xs leading-5 text-blue-900">
+          <strong>Prototype mode.</strong> Council responses are deterministic
+          demonstration content, not live AI inference. Projects are stored only
+          in this browser.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="page" aria-label="Loading dashboard">
+      <div className="skeleton h-4 w-28" />
+      <div className="skeleton mt-4 h-10 w-64" />
+      <div className="skeleton mt-3 h-4 w-96 max-w-full" />
+      <div className="mt-10 grid gap-4 sm:grid-cols-3">
+        {[0, 1, 2].map((item) => (
+          <div key={item} className="skeleton h-20 rounded-xl" />
+        ))}
+      </div>
+      <div className="skeleton mt-10 h-5 w-36" />
+      <div className="skeleton mt-4 h-64 rounded-xl" />
+      <span className="sr-only">Loading locally saved project information</span>
+    </div>
+  )
+}
+
+function EmptyState({ navigate }: { navigate: (s: Screen) => void }) {
+  return (
+    <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+      <span className="mx-auto grid size-12 place-items-center rounded-xl bg-slate-100 text-slate-500">
+        <Lightbulb size={21} />
+      </span>
+      <h3 className="mt-5 font-semibold">Start with an open question</h3>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
+        Describe an idea, decision, or project. The Council will help you test
+        it before you commit.
+      </p>
+      <button onClick={() => navigate("new")} className="btn-primary mt-6">
+        <Plus size={16} />
+        Create your first project
+      </button>
+    </div>
+  )
+}
+
+function MissingProject({ navigate }: { navigate: (screen: Screen) => void }) {
+  return (
+    <div className="page">
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+        <span className="mx-auto grid size-12 place-items-center rounded-xl bg-slate-100 text-slate-500">
+          <AlertCircle size={21} />
+        </span>
+        <h2 className="mt-5 font-semibold">
+          Project information is unavailable
+        </h2>
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
+          This project may have been removed from local storage. Return to the
+          project library or begin a new Council session.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <button
+            onClick={() => navigate("projects")}
+            className="btn-secondary"
+          >
+            Browse projects
+          </button>
+          <button onClick={() => navigate("new")} className="btn-primary">
+            <Plus size={15} />
+            New project
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProjectsScreen({
+  projects,
+  open,
+  remove,
+  navigate,
+}: {
+  projects: Project[]
+  open: (p: Project) => void
+  remove: (p: Project) => void
+  navigate: (s: Screen) => void
+}) {
+  return (
+    <div className="page">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="page-kicker">PROJECT LIBRARY</p>
+          <h2 className="page-title">My projects</h2>
+          <p className="page-subtitle">
+            Plans and analyses saved in this browser.
+          </p>
+        </div>
+        <button onClick={() => navigate("new")} className="btn-primary">
+          <Plus size={16} />
+          New project
+        </button>
+      </div>
+      <div className="mt-9 grid gap-4 lg:grid-cols-2">
+        {projects.map((p) => (
+          <article
+            key={p.id}
+            className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 hover:shadow-lg hover:shadow-slate-200/40"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <span className="project-icon">
+                <FileText size={17} />
+              </span>
+              <StatusPill status={p.status} />
+            </div>
+            <button
+              onClick={() => open(p)}
+              className="mt-6 block w-full text-left"
+            >
+              <h3 className="text-lg font-semibold tracking-[-.025em] text-slate-950 group-hover:text-blue-700">
+                {p.title}
+              </h3>
+              <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">
+                {p.objective}
+              </p>
+            </button>
+            <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
+              <span className="text-xs text-slate-500">
+                Updated {fmtDate(p.updatedAt)}
+              </span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => remove(p)}
+                  className="icon-button hover:text-red-600"
+                  aria-label={`Delete ${p.title}`}
+                >
+                  <Trash2 size={15} />
+                </button>
+                <button onClick={() => open(p)} className="icon-button">
+                  <ArrowRight size={15} />
+                </button>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ProjectForm({
+  submit,
+  cancel,
+}: {
+  submit: (f: ProjectFormData) => void
+  cancel: () => void
+}) {
+  const [form, setForm] = useState(blankForm)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [step, setStep] = useState(0)
+  const steps = ["Core idea", "Constraints", "Review"]
+  const update = (key: keyof ProjectFormData, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }))
+    setErrors((current) => ({ ...current, [key]: "" }))
+  }
+  const validateStep = () => {
+    const next: Record<string, string> = {}
+    if (step === 0) {
+      if (!form.title.trim()) next.title = "Add a short project title."
+      if (form.objective.trim().length < 20)
+        next.objective = "Describe the objective in at least 20 characters."
+      if (form.context.trim().length < 20)
+        next.context = "Add enough context for the Council to reason from."
+      if (!form.outcome.trim())
+        next.outcome = "Describe what a useful outcome would look like."
+    }
+    setErrors(next)
+    return !Object.keys(next).length
+  }
+  const next = () => {
+    if (validateStep()) setStep((value) => Math.min(value + 1, 2))
+  }
+  const field = (
+    key: keyof ProjectFormData,
+    label: string,
+    placeholder: string,
+    helper?: string,
+    area = false,
+    max = 800,
+  ) => (
+    <label className="field">
+      <span>{label}</span>
+      {helper && <small>{helper}</small>}
+      {area ? (
+        <>
+          <textarea
+            rows={3}
+            value={form[key]}
+            maxLength={max}
+            onChange={(event) => update(key, event.target.value)}
+            onInput={(event) => {
+              const target = event.currentTarget
+              target.style.height = "auto"
+              target.style.height = `${target.scrollHeight}px`
+            }}
+            placeholder={placeholder}
+            className={errors[key] ? "input-error" : ""}
+          />
+          <span className="character-count">
+            {form[key].length} / {max}
+          </span>
+        </>
+      ) : (
+        <input
+          value={form[key]}
+          onChange={(event) => update(key, event.target.value)}
+          placeholder={placeholder}
+          className={errors[key] ? "input-error" : ""}
+        />
+      )}
+      {errors[key] && (
+        <em className="validation-message">
+          <AlertCircle size={13} />
+          {errors[key]}
+        </em>
+      )}
+    </label>
+  )
+  return (
+    <div className="page max-w-4xl page-enter">
+      <button onClick={cancel} className="back-button">
+        <ArrowLeft size={15} />
+        Back to overview
+      </button>
+      <div className="mt-7">
+        <p className="page-kicker">NEW COUNCIL SESSION</p>
+        <h2 className="page-title max-w-2xl">
+          Give the Council the context it needs.
+        </h2>
+        <p className="page-subtitle max-w-2xl">
+          A short guided brief turns uncertainty into structured evidence for
+          the Council.
+        </p>
+      </div>
+      <div className="form-progress mt-8">
+        {steps.map((label, index) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => index < step && setStep(index)}
+            className={
+              index === step ? "active" : index < step ? "complete" : ""
+            }
+          >
+            <span>{index < step ? <Check size={12} /> : index + 1}</span>
+            <em>{label}</em>
+          </button>
+        ))}
+        <div className="form-progress-line">
+          <span style={{ width: `${step * 50}%` }} />
+        </div>
+      </div>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (step < 2) next()
+          else submit(form)
+        }}
+        className="form-shell mt-9"
+      >
+        <div key={step} className="form-step-enter">
+          {step === 0 && (
+            <div className="grid gap-6">
+              <div className="form-section-heading">
+                <span>01</span>
+                <div>
+                  <h3>Frame the decision</h3>
+                  <p>
+                    Describe what the Council should test and why it matters
+                    now.
+                  </p>
+                </div>
+              </div>
+              {field(
+                "title",
+                "Project title",
+                "e.g. Validate a new service concept",
+              )}
+              {field(
+                "objective",
+                "Main objective or problem to solve",
+                "What decision, problem, or opportunity should the Council examine?",
+                "Focus on the central question rather than a proposed solution.",
+                true,
+                500,
+              )}
+              {field(
+                "context",
+                "Context and background",
+                "What has led to this point? What evidence or uncertainty already exists?",
+                "Include known facts, stakeholders, and open questions.",
+                true,
+                900,
+              )}
+              {field(
+                "outcome",
+                "Expected outcome",
+                "What would a useful result make possible?",
+                undefined,
+                true,
+                500,
+              )}
+            </div>
+          )}
+          {step === 1 && (
+            <div className="grid gap-6">
+              <div className="form-section-heading">
+                <span>02</span>
+                <div>
+                  <h3>Ground the analysis</h3>
+                  <p>
+                    Optional constraints help the Feasibility Analyst produce a
+                    more realistic recommendation.
+                  </p>
+                </div>
+              </div>
+              <label className="field">
+                <span>
+                  Target date <small className="inline">(optional)</small>
+                </span>
+                <input
+                  type="date"
+                  value={form.targetDate}
+                  onChange={(event) => update("targetDate", event.target.value)}
+                />
+              </label>
+              {field(
+                "budget",
+                "Budget or financial constraint",
+                "e.g. Maximum $15,000",
+              )}
+              {field(
+                "resources",
+                "Available resources",
+                "e.g. One designer, two engineers",
+                "Include people, tools, access, and time that are already available.",
+                true,
+                500,
+              )}
+              <div className="context-tip">
+                <Lightbulb size={17} />
+                <p>
+                  <strong>Useful detail:</strong> Unknown constraints are valid.
+                  The Critical Reviewer will identify what must be clarified.
+                </p>
+              </div>
+            </div>
+          )}
+          {step === 2 && (
+            <div className="grid gap-5">
+              <div className="form-section-heading">
+                <span>03</span>
+                <div>
+                  <h3>Review the Council brief</h3>
+                  <p>
+                    Confirm the distinction between what you know and what the
+                    Council will need to assume.
+                  </p>
+                </div>
+              </div>
+              {[
+                ["Project", form.title],
+                ["Objective", form.objective],
+                ["Context", form.context],
+                ["Expected outcome", form.outcome],
+              ].map(([label, value]) => (
+                <div key={label} className="review-row">
+                  <span>{label}</span>
+                  <p>{value}</p>
+                  <button type="button" onClick={() => setStep(0)}>
+                    Edit
+                  </button>
+                </div>
+              ))}
+              <div className="review-row">
+                <span>Constraints</span>
+                <p>
+                  {[form.targetDate, form.budget, form.resources]
+                    .filter(Boolean)
+                    .join(" · ") || "No explicit constraints provided"}
+                </p>
+                <button type="button" onClick={() => setStep(1)}>
+                  Edit
+                </button>
+              </div>
+              <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs leading-5 text-blue-900">
+                <Info size={16} className="mt-0.5 shrink-0" />
+                <p>
+                  This starts a deterministic simulation. It does not send your
+                  brief to a live AI service.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            onClick={() => (step ? setStep(step - 1) : cancel())}
+            className="btn-secondary"
+          >
+            {step ? "Previous" : "Cancel"}
+          </button>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-slate-400">Step {step + 1} of 3</span>
+            <button type="submit" className="btn-primary">
+              {step === 2 ? (
+                <>
+                  Analyze my project <Sparkles size={16} />
+                </>
+              ) : (
+                <>
+                  Continue <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function CouncilScreen({
+  project,
+  complete,
+}: {
+  project: Project
+  complete: () => void
+}) {
+  const [stage, setStage] = useState<CouncilStage>(0)
+  const [paused, setPaused] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const completeRef = useRef(complete)
+  completeRef.current = complete
+  useEffect(() => {
+    if (paused || failed) return
+    if (stage === 4) {
+      const done = window.setTimeout(() => completeRef.current(), 1800)
+      return () => clearTimeout(done)
+    }
+    const timer = window.setTimeout(
+      () => setStage((value) => Math.min(value + 1, 4) as CouncilStage),
+      stage === 1 ? 2500 : 1700,
+    )
+    return () => clearTimeout(timer)
+  }, [failed, paused, stage])
+  const stages = [
+    "Input distributed",
+    "Parallel analysis",
+    "Perspectives converge",
+    "Arbitration",
+    "Intelligence ready",
+  ]
+  const replay = () => {
+    setFailed(false)
+    setPaused(false)
+    setStage(0)
+  }
+  return (
+    <div className="min-h-[calc(100vh-5rem)] bg-[#101827] px-4 py-8 text-white sm:px-6 lg:px-10 lg:py-10">
+      <div className="mx-auto max-w-6xl page-enter">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-xs text-blue-300">
+              <span
+                className={
+                  paused ? "size-2 rounded-full bg-amber-400" : "pulse-dot"
+                }
+              />
+              {paused ? "SIMULATION PAUSED" : "COUNCIL SIMULATION ACTIVE"}
+            </div>
+            <h2 className="mt-4 text-3xl font-medium tracking-[-.04em]">
+              {project.title}
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Three independent perspectives analyze in parallel before
+              converging on the Arbiter.
+            </p>
+          </div>
+          <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-400">
+            Deterministic demo · no live AI
+          </span>
+        </div>
+        <div className="mt-7 rounded-xl border border-white/8 bg-white/[.025] p-4">
+          <div className="flex items-center justify-between gap-4 text-xs">
+            <span className="text-blue-200">
+              Stage {stage + 1} of 5 · {stages[stage]}
+            </span>
+            <span className="text-slate-500">{(stage + 1) * 20}%</span>
+          </div>
+          <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/5">
+            <div
+              className="council-progress"
+              style={{ width: `${(stage + 1) * 20}%` }}
+            />
+          </div>
+        </div>
+        <div className="mt-5">
+          <CouncilDiagram
+            project={project}
+            stage={stage}
+            paused={paused}
+            onPause={() => setPaused((value) => !value)}
+            onReplay={replay}
+          />
+        </div>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-slate-500">
+          <Info size={13} />
+          <span>
+            Animation timing is driven by the simulated Council stage.
+          </span>
+          {!failed && (
+            <button
+              className="text-slate-400 underline decoration-slate-700 underline-offset-4 hover:text-slate-200"
+              onClick={() => setFailed(true)}
+            >
+              Preview error state
+            </button>
+          )}
+        </div>
+        {failed && (
+          <div className="error-state mt-5">
+            <AlertCircle size={18} />
+            <div>
+              <strong>Analysis simulation interrupted</strong>
+              <p>
+                No project data was lost. Retry to restart the state-driven
+                sequence.
+              </p>
+            </div>
+            <button onClick={replay}>Retry analysis</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Results({ project, plan }: { project: Project; plan: () => void }) {
+  return (
+    <div className="page max-w-5xl">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-semibold tracking-widest text-emerald-700">
+            <CheckCircle2 size={14} />
+            COUNCIL COMPLETE
+          </div>
+          <h2 className="page-title mt-3">{project.title}</h2>
+          <p className="page-subtitle">
+            A structured comparison of the Council’s findings and the Arbiter’s
+            decision.
+          </p>
+        </div>
+        <button onClick={plan} className="btn-primary">
+          Open project plan <ArrowRight size={16} />
+        </button>
+      </div>
+      <div className="mt-8 grid gap-4 sm:grid-cols-3">
+        <InfoCard
+          label="PROVIDED BY YOU"
+          tone="blue"
+          text={project.objective}
+        />
+        <InfoCard
+          label="AI ASSUMPTION"
+          tone="amber"
+          text="Early users can be recruited within two weeks through accessible channels."
+        />
+        <InfoCard
+          label="COUNCIL RECOMMENDATION"
+          tone="green"
+          text="Proceed with a time-boxed validation phase before funding a full build."
+        />
+      </div>
+      <ReportSection icon={FileText} title="Executive summary">
+        <p>
+          The concept is strategically coherent and suitable for a focused
+          validation cycle. The Council recommends proceeding conditionally:
+          constrain the first release, verify access to target users, and define
+          measurable evidence thresholds before delivery begins.
+        </p>
+      </ReportSection>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Assessment
+          title="Strategic assessment"
+          rating="Strong"
+          body="The objective supports a clear decision and avoids premature commitment. The intended outcome is specific enough to guide discovery."
+        />
+        <Assessment
+          title="Feasibility assessment"
+          rating="Conditional"
+          body="The proposed direction is viable within the stated constraints if the initial workflow remains tightly scoped."
+        />
+        <Assessment
+          title="Critical review"
+          rating="3 flags"
+          body="User access, evidence quality, and uncontrolled scope are the assumptions most likely to undermine the result."
+        />
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <ReportSection icon={CheckCircle2} title="Points of agreement" compact>
+          <ul className="report-list">
+            <li>Validate demand before committing to implementation.</li>
+            <li>Focus on one audience and one critical workflow.</li>
+            <li>Define decision thresholds before collecting evidence.</li>
+          </ul>
+        </ReportSection>
+        <ReportSection
+          icon={Zap}
+          title="Disagreements and trade-offs"
+          compact
+          accent
+        >
+          <div className="space-y-4">
+            <div>
+              <span className="argument-label">STRATEGY</span>
+              <p>
+                Favored a broader proposition to preserve long-term opportunity.
+              </p>
+            </div>
+            <div>
+              <span className="argument-label">FEASIBILITY + CRITIQUE</span>
+              <p>
+                Argued that breadth creates untestable scope and weakens
+                evidence.
+              </p>
+            </div>
+            <div className="resolution">
+              <Scale size={15} />
+              <p>
+                <strong>Arbiter resolution:</strong> preserve the broader vision
+                as context, but test only the narrow critical path.
+              </p>
+            </div>
+          </div>
+        </ReportSection>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <ReportSection icon={Lightbulb} title="Key assumptions" compact>
+          <ul className="report-list numbered">
+            <li>Target users experience the problem at least monthly.</li>
+            <li>A prototype is sufficient to test the core value.</li>
+            <li>Decision-makers accept a staged investment model.</li>
+          </ul>
+        </ReportSection>
+        <ReportSection icon={ShieldAlert} title="Identified risks" compact>
+          <div className="space-y-3">
+            {project.risks.map((r) => (
+              <div
+                key={r.title}
+                className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm"
+              >
+                <span>{r.title}</span>
+                <span className="status status-amber">{r.likelihood}</span>
+              </div>
+            ))}
+          </div>
+        </ReportSection>
+      </div>
+      <div className="mt-4 rounded-2xl bg-[#101827] p-6 text-white sm:p-8">
+        <div className="flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-xl bg-violet-400/15 text-violet-300">
+            <Scale size={19} />
+          </span>
+          <div>
+            <p className="text-xs font-semibold tracking-widest text-violet-300">
+              FINAL ARBITER RECOMMENDATION
+            </p>
+            <h3 className="mt-1 text-xl font-medium">
+              Proceed—through a gated validation plan.
+            </h3>
+          </div>
+        </div>
+        <p className="mt-5 max-w-3xl text-sm leading-7 text-slate-300">
+          The opportunity warrants further investment, but current evidence does
+          not support a full build. Complete the three proposed phases, review
+          the stated success criteria, then make a deliberate proceed, revise,
+          or stop decision.
+        </p>
+        <button onClick={plan} className="btn-light mt-6">
+          Review actionable plan <ArrowRight size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function InfoCard({
+  label,
+  text,
+  tone,
+}: {
+  label: string
+  text: string
+  tone: "blue" | "amber" | "green"
+}) {
+  return (
+    <div className={`info-card info-${tone}`}>
+      <span>{label}</span>
+      <p>{text}</p>
+    </div>
+  )
+}
+
+function ReportSection({
+  icon: Icon,
+  title,
+  children,
+  compact = false,
+  accent = false,
+}: {
+  icon: typeof FileText
+  title: string
+  children: React.ReactNode
+  compact?: boolean
+  accent?: boolean
+}) {
+  return (
+    <section
+      className={`mt-4 rounded-2xl border bg-white ${
+        accent ? "border-violet-200" : "border-slate-200"
+      } ${compact ? "p-5 sm:p-6" : "p-6 sm:p-8"}`}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className={`grid size-9 place-items-center rounded-lg ${
+            accent
+              ? "bg-violet-50 text-violet-600"
+              : "bg-slate-100 text-slate-600"
+          }`}
+        >
+          <Icon size={17} />
+        </span>
+        <h3 className="font-semibold tracking-[-.02em]">{title}</h3>
+      </div>
+      <div className="mt-5 text-sm leading-7 text-slate-600">{children}</div>
+    </section>
+  )
+}
+
+function Assessment({
+  title,
+  rating,
+  body,
+}: {
+  title: string
+  rating: string
+  body: string
+}) {
+  return (
+    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <span className="status status-blue">{rating}</span>
+      </div>
+      <p className="mt-4 text-sm leading-6 text-slate-600">{body}</p>
+    </div>
+  )
+}
+
+function PlanScreen({
+  project,
+  updateProject,
+  notify,
+}: {
+  project: Project
+  updateProject: (p: Project) => void
+  notify: (kind: ToastKind, title: string, message?: string) => void
+}) {
+  const [expanded, setExpanded] = useState<string[]>(
+    project.phases.map((p) => p.id),
+  )
+  const [confirmValidation, setConfirmValidation] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
+  const allTasks = project.phases.flatMap((phase) => phase.tasks)
+  const completedTasks = allTasks.filter((task) => task.completed).length
+  const progress = allTasks.length
+    ? Math.round((completedTasks / allTasks.length) * 100)
+    : 0
+  const patch = (updates: Partial<Project>) =>
+    updateProject({
+      ...project,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    })
+  const updatePhase = (phaseId: string, updater: (phase: Phase) => Phase) =>
+    patch({
+      phases: project.phases.map((p) => (p.id === phaseId ? updater(p) : p)),
+    })
+  const updateTask = (phaseId: string, taskId: string, data: Partial<Task>) =>
+    updatePhase(phaseId, (p) => ({
+      ...p,
+      tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, ...data } : t)),
+    }))
+  const moveTask = (phaseId: string, index: number, direction: -1 | 1) =>
+    updatePhase(phaseId, (p) => {
+      const tasks = [...p.tasks]
+      const target = index + direction
+      if (target < 0 || target >= tasks.length) return p
+      ;[tasks[index], tasks[target]] = [tasks[target], tasks[index]]
+      return { ...p, tasks }
+    })
+  const removeTask = (phaseId: string, taskId: string) =>
+    updatePhase(phaseId, (p) => ({
+      ...p,
+      tasks: p.tasks.filter((t) => t.id !== taskId),
+    }))
+  const addTask = (phaseId: string) => {
+    updatePhase(phaseId, (p) => ({
+      ...p,
+      tasks: [
+        ...p.tasks,
+        {
+          id: crypto.randomUUID(),
+          title: "New task",
+          description: "Describe the intended work.",
+          priority: "Medium",
+          duration: "1 week",
+          dependency: "None",
+          resource: "Unassigned",
+          deliverable: "Defined output",
+        },
+      ],
+    }))
+    notify("info", "Task added", "The new task is ready to edit.")
+  }
+  const exportFile = (type: "md" | "csv") => {
+    let content = ""
+    let mime = "text/markdown"
+    if (type === "md")
+      content = `# ${project.title}\n\n${project.objective}\n\n${project.phases.map((p) => `## ${p.title}\n${p.objective}\n\n${p.tasks.map((t) => `- **${t.title}** — ${t.description} (${t.priority}, ${t.duration})`).join("\n")}`).join("\n\n")}`
+    else {
+      mime = "text/csv"
+      content = [
+        "Phase,Task,Priority,Duration,Dependency,Resource,Deliverable",
+        ...project.phases.flatMap((p) =>
+          p.tasks.map((t) =>
+            [
+              p.title,
+              t.title,
+              t.priority,
+              t.duration,
+              t.dependency,
+              t.resource,
+              t.deliverable,
+            ]
+                .map((v) => `"${v.replace(/"/g, '""')}"`)
+              .join(","),
+          ),
+        ),
+      ].join("\n")
+    }
+    try {
+      const url = URL.createObjectURL(new Blob([content], { type: mime }))
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${project.title.replace(/\W+/g, "-").toLowerCase()}.${type}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setExportOpen(false)
+      notify(
+        "success",
+        `${type === "md" ? "Markdown" : "CSV"} exported`,
+        "The file download was created successfully.",
+      )
+    } catch {
+      notify(
+        "error",
+        "Export failed",
+        "The browser could not create the requested file.",
+      )
+    }
+  }
+  return (
+    <div className="page max-w-6xl">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <StatusPill status={project.status} />
+            <span className="text-xs text-slate-400">
+              Updated {fmtDate(project.updatedAt)}
+            </span>
+          </div>
+          <input
+            className="title-input mt-3"
+            value={project.title}
+            onChange={(e) => patch({ title: e.target.value })}
+            aria-label="Project title"
+          />
+          <p className="mt-2 text-sm text-slate-500">
+            Editable Council-generated plan · changes save locally
+          </p>
+          <div className="plan-progress mt-4">
+            <div>
+              <span>Project progress</span>
+              <strong>{progress}%</strong>
+            </div>
+            <div className="progress-track">
+              <span style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <div className="relative">
+            <button
+              onClick={() => setExportOpen(!exportOpen)}
+              className="btn-secondary"
+            >
+              <Download size={15} />
+              Export <ChevronDown size={14} />
+            </button>
+            {exportOpen && (
+              <div className="export-menu">
+                <button onClick={() => exportFile("md")}>
+                  Markdown <span>.md</span>
+                </button>
+                <button onClick={() => exportFile("csv")}>
+                  Task data <span>.csv</span>
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setConfirmValidation(true)}
+            className="btn-primary"
+            disabled={project.status === "Validated"}
+          >
+            <CheckCircle2 size={16} />
+            {project.status === "Validated"
+              ? "Plan validated"
+              : "Validate plan"}
+          </button>
+        </div>
+      </div>
+      <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_280px]">
+        <div>
+          <section className="rounded-2xl border border-slate-200 bg-white p-6">
+            <p className="block-label">PROJECT OVERVIEW</p>
+            <textarea
+              className="editable-overview"
+              value={project.objective}
+              onChange={(e) => patch({ objective: e.target.value })}
+              aria-label="Project objective"
+            />
+            <div className="mt-5 flex flex-wrap gap-5 text-xs text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <CalendarDays size={14} />
+                {project.targetDate
+                  ? fmtDate(project.targetDate)
+                  : "No fixed deadline"}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <ListChecks size={14} />
+                {project.phases.length} phases ·{" "}
+                {project.phases.reduce((n, p) => n + p.tasks.length, 0)} tasks
+              </span>
+            </div>
+          </section>
+          <div className="mt-5 space-y-4">
+            {project.phases.map((phase, phaseIndex) => (
+              <section
+                key={phase.id}
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+              >
+                <button
+                  className="flex w-full items-start gap-4 p-5 text-left sm:p-6"
+                  onClick={() =>
+                    setExpanded((e) =>
+                      e.includes(phase.id)
+                        ? e.filter((x) => x !== phase.id)
+                        : [...e, phase.id],
+                    )
+                  }
+                >
+                  <span className="mt-0.5 font-mono text-xs text-blue-600">
+                    0{phaseIndex + 1}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-semibold tracking-[-.02em]">
+                      {phase.title.replace(/^\d+ — /, "")}
+                    </span>
+                    <span className="mt-1 block text-sm leading-6 text-slate-500">
+                      {phase.objective}
+                    </span>
+                  </span>
+                  <span className="status status-gray">
+                    {phase.tasks.filter((task) => task.completed).length}/
+                    {phase.tasks.length} complete
+                  </span>
+                  <ChevronDown
+                    size={17}
+                    className={`mt-1 text-slate-400 transition ${
+                      expanded.includes(phase.id) ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+                {expanded.includes(phase.id) && (
+                  <div className="border-t border-slate-100 px-4 pb-5 sm:px-6">
+                    {phase.tasks.map((task, index) => (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        index={index}
+                        total={phase.tasks.length}
+                        update={(data) => updateTask(phase.id, task.id, data)}
+                        remove={() => removeTask(phase.id, task.id)}
+                        move={(dir) => moveTask(phase.id, index, dir)}
+                        toggle={() =>
+                          updateTask(phase.id, task.id, {
+                            completed: !task.completed,
+                          })
+                        }
+                      />
+                    ))}
+                    <button
+                      onClick={() => addTask(phase.id)}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 py-3 text-xs font-medium text-slate-500 hover:border-blue-300 hover:text-blue-700"
+                    >
+                      <Plus size={14} />
+                      Add task
+                    </button>
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
+        </div>
+        <aside className="space-y-4">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+            <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+              <Lightbulb size={16} />
+              Assumption check
+            </div>
+            <p className="mt-3 text-xs leading-5 text-amber-800">
+              Review Council assumptions before validation. Validation remains a
+              human decision.
+            </p>
+            <button className="mt-4 text-xs font-semibold text-amber-900 underline underline-offset-4">
+              Review 3 assumptions
+            </button>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <h3 className="text-sm font-semibold">Success criteria</h3>
+            <ul className="mt-4 space-y-3 text-xs leading-5 text-slate-600">
+              <li className="flex gap-2">
+                <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" />
+                At least 6 of 8 interviews confirm recurring urgency.
+              </li>
+              <li className="flex gap-2">
+                <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" />
+                4 of 5 test users complete the critical path.
+              </li>
+              <li className="flex gap-2">
+                <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" />
+                Delivery estimate remains inside the stated constraint.
+              </li>
+            </ul>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <h3 className="text-sm font-semibold">Risks & mitigation</h3>
+            <div className="mt-4 space-y-4">
+              {project.risks.map((r) => (
+                <div key={r.title}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-medium">{r.title}</p>
+                    <span className="status status-amber">{r.likelihood}</span>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                    {r.mitigation}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
+      </div>
+      <ConfirmationDialog
+        open={confirmValidation}
+        title="Validate this project plan?"
+        description="Validation confirms that you have reviewed the Council’s assumptions, risks, tasks, and success criteria. You can continue editing afterward."
+        confirmLabel="Validate plan"
+        onClose={() => setConfirmValidation(false)}
+        onConfirm={() => {
+          patch({ status: "Validated" })
+          setConfirmValidation(false)
+          notify(
+            "success",
+            "Plan validated",
+            "Your review decision has been saved locally.",
+          )
+        }}
+      />
+    </div>
+  )
+}
+
+function TaskRow({
+  task,
+  index,
+  total,
+  update,
+  remove,
+  move,
+  toggle,
+}: {
+  task: Task
+  index: number
+  total: number
+  update: (d: Partial<Task>) => void
+  remove: () => void
+  move: (d: -1 | 1) => void
+  toggle: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div
+      className={`task-row border-b border-slate-100 py-4 last:border-0 ${
+        task.completed ? "is-complete" : ""
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <button
+          onClick={toggle}
+          className="task-checkbox"
+          aria-label={
+            task.completed
+              ? `Mark ${task.title} incomplete`
+              : `Mark ${task.title} complete`
+          }
+          aria-pressed={!!task.completed}
+        >
+          {task.completed && <Check size={12} />}
+        </button>
+        <GripVertical size={15} className="shrink-0 text-slate-300" />
+        <button
+          onClick={() => setOpen(!open)}
+          className="min-w-0 flex-1 text-left"
+        >
+          <input
+            value={task.title}
+            onChange={(e) => update({ title: e.target.value })}
+            onClick={(e) => e.stopPropagation()}
+            className="task-title"
+            aria-label="Task title"
+          />
+          <span className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+            <span
+              className={`priority priority-${task.priority.toLowerCase()}`}
+            >
+              {task.priority}
+            </span>
+            <span>{task.duration}</span>
+            <span>·</span>
+            <span>{task.deliverable}</span>
+          </span>
+        </button>
+        <div className="flex items-center">
+          <button
+            disabled={index === 0}
+            onClick={() => move(-1)}
+            className="icon-button"
+            aria-label="Move task up"
+          >
+            <ArrowUp size={14} />
+          </button>
+          <button
+            disabled={index === total - 1}
+            onClick={() => move(1)}
+            className="icon-button"
+            aria-label="Move task down"
+          >
+            <ArrowDown size={14} />
+          </button>
+          <button onClick={() => setOpen(!open)} className="icon-button">
+            <ChevronDown size={14} className={open ? "rotate-180" : ""} />
+          </button>
+        </div>
+      </div>
+      {open && (
+        <div className="ml-6 mt-4 grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
+          <label className="mini-field sm:col-span-2">
+            Description
+            <textarea
+              value={task.description}
+              onChange={(e) => update({ description: e.target.value })}
+              rows={2}
+            />
+          </label>
+          <label className="mini-field">
+            Priority
+            <select
+              value={task.priority}
+              onChange={(e) =>
+                update({ priority: e.target.value as Task["priority"] })
+              }
+            >
+              <option>High</option>
+              <option>Medium</option>
+              <option>Low</option>
+            </select>
+          </label>
+          <label className="mini-field">
+            Duration
+            <input
+              value={task.duration}
+              onChange={(e) => update({ duration: e.target.value })}
+            />
+          </label>
+          <label className="mini-field">
+            Dependency
+            <input
+              value={task.dependency}
+              onChange={(e) => update({ dependency: e.target.value })}
+            />
+          </label>
+          <label className="mini-field">
+            Required resource
+            <input
+              value={task.resource}
+              onChange={(e) => update({ resource: e.target.value })}
+            />
+          </label>
+          <label className="mini-field sm:col-span-2">
+            Deliverable
+            <input
+              value={task.deliverable}
+              onChange={(e) => update({ deliverable: e.target.value })}
+            />
+          </label>
+          <button
+            onClick={remove}
+            className="flex items-center gap-2 text-xs font-medium text-red-600"
+          >
+            <Trash2 size={13} />
+            Remove task
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SettingsScreen({
+  theme,
+  setTheme,
+}: {
+  theme: "light" | "dark"
+  setTheme: (theme: "light" | "dark") => void
+}) {
+  return (
+    <div className="page max-w-4xl">
+      <p className="page-kicker">PREFERENCES</p>
+      <h2 className="page-title">Settings</h2>
+      <p className="page-subtitle">
+        Keep the experience comfortable and understand how this prototype
+        handles data.
+      </p>
+      <div className="mt-9 space-y-4">
+        <Setting
+          icon={Sun}
+          title="Interface theme"
+          description="Choose how Leanie appears on this device."
+        >
+          <div className="segmented">
+            {(["light", "dark"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTheme(t)}
+                className={theme === t ? "selected" : ""}
+              >
+                {t === "light" ? "Light" : "Dark"}
+              </button>
+            ))}
+          </div>
+        </Setting>
+        <Setting
+          icon={Languages}
+          title="Language"
+          description="The prototype is currently available in English."
+        >
+          <select className="settings-select">
+            <option>English</option>
+          </select>
+        </Setting>
+        <Setting
+          icon={Bot}
+          title="AI configuration"
+          description="Council responses use deterministic demonstration data. No AI provider is connected."
+        >
+          <span className="status status-amber">Simulation only</span>
+        </Setting>
+        <Setting
+          icon={ShieldAlert}
+          title="Privacy & AI usage"
+          description="Projects are stored in your browser’s localStorage and are not synchronized or sent to a server."
+        >
+          <span className="status status-green">Local only</span>
+        </Setting>
+        <Setting
+          icon={Info}
+          title="Application"
+          description="Leanie — Lean Intelligence Engine. Early-stage frontend prototype by LiteTECH Startup."
+        >
+          <span className="text-xs text-slate-400">Version 0.1</span>
+        </Setting>
+      </div>
+    </div>
+  )
+}
+
+function Setting({
+  icon: Icon,
+  title,
+  description,
+  children,
+}: {
+  icon: typeof Sun
+  title: string
+  description: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center">
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600">
+        <Icon size={18} />
+      </span>
+      <div className="flex-1">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+export default function App() {
+  const [screen, setScreen] = useState<Screen>(() =>
+    location.hash ? location.hash.slice(1) as Screen : "landing",
+  )
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [commandOpen, setCommandOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("leanie-sidebar") === "collapsed",
+  )
+  const [theme, setTheme] = useState<"light" | "dark">(() =>
+    localStorage.getItem("leanie-theme") === "dark" ? "dark" : "light",
+  )
+  const [toasts, setToasts] = useState<ToastItem[]>([])
+  const [projects, setProjects] = useState<Project[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      return stored ? JSON.parse(stored) : [demoProject]
+    } catch {
+      return [demoProject]
+    }
+  })
+  const [selectedId, setSelectedId] = useState(projects[0]?.id ?? "")
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
+  const selected = useMemo(
+    () => projects.find((p) => p.id === selectedId) ?? projects[0],
+    [projects, selectedId],
+  )
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects))
+  }, [projects])
+  useEffect(() => {
+    localStorage.setItem("leanie-theme", theme)
+    document.documentElement.style.colorScheme = theme
+  }, [theme])
+  useEffect(
+    () =>
+      localStorage.setItem(
+        "leanie-sidebar",
+        collapsed ? "collapsed" : "expanded",
+      ),
+    [collapsed],
+  )
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        setCommandOpen((value) => !value)
+      }
+      if (event.key === "Escape") setCommandOpen(false)
+    }
+    window.addEventListener("keydown", handleKey)
+    return () => window.removeEventListener("keydown", handleKey)
+  }, [])
+  const notify = useCallback(
+    (kind: ToastKind, title: string, message?: string) => {
+      const id = crypto.randomUUID()
+      setToasts((items) => [...items, { id, kind, title, message }].slice(-4))
+      window.setTimeout(
+        () => setToasts((items) => items.filter((item) => item.id !== id)),
+        4200,
+      )
+    },
+    [],
+  )
+  const navigate = (s: Screen) => {
+    setScreen(s)
+    history.replaceState(null, "", `#${s}`)
+    window.scrollTo(0, 0)
+    scrollRef.current?.scrollTo(0, 0)
+  }
+  const openProject = (p: Project) => {
+    setSelectedId(p.id)
+    navigate(
+      p.status === "Analyzing"
+        ? "council"
+        : p.status === "Draft"
+          ? "results"
+          : "plan",
+    )
+  }
+  const createProject = (form: ProjectFormData) => {
+    const plan = cloneDemoPlan()
+    const now = new Date().toISOString()
+    const project: Project = {
+      ...form,
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+      status: "Analyzing",
+      ...plan,
+    }
+    setProjects((p) => [project, ...p])
+    setSelectedId(project.id)
+    navigate("council")
+    notify(
+      "info",
+      "Council simulation started",
+      "Three specialist perspectives will analyze in parallel.",
+    )
+  }
+  const completeCouncil = () => {
+    if (!selected) return
+    setProjects((p) =>
+      p.map((x) =>
+        x.id === selected.id
+          ? { ...x, status: "Plan ready", updatedAt: new Date().toISOString() }
+          : x,
+      ),
+    )
+    navigate("results")
+  }
+  const updateProject = (project: Project) =>
+    setProjects((p) => p.map((x) => (x.id === project.id ? project : x)))
+  const deleteProject = () => {
+    if (!deleteTarget) return
+    setProjects((p) => p.filter((x) => x.id !== deleteTarget.id))
+    if (selectedId === deleteTarget.id) setSelectedId("")
+    setDeleteTarget(null)
+    navigate("projects")
+    notify(
+      "success",
+      "Project deleted",
+      "The local project data has been removed.",
+    )
+  }
+
+  if (screen === "landing")
+    return <Landing enter={(s = "overview") => navigate(s)} />
+  const title =
+    screen === "overview"
+      ? "Overview"
+      : screen === "projects"
+        ? "My Projects"
+        : screen === "new"
+          ? "New Project"
+          : screen === "settings"
+            ? "Settings"
+            : (selected?.title ?? "Project")
+  return (
+    <div
+      className={`app-shell min-h-screen bg-[#f8f9fc] text-[#101827] theme-${theme}`}
+    >
+      <Sidebar
+        screen={screen}
+        navigate={navigate}
+        mobileOpen={mobileOpen}
+        close={() => setMobileOpen(false)}
+        collapsed={collapsed}
+        toggleCollapsed={() => setCollapsed((value) => !value)}
+        openCommand={() => setCommandOpen(true)}
+      />
+      <main className={`app-main ${collapsed ? "sidebar-collapsed" : ""}`}>
+        <AppHeader
+          title={title}
+          menu={() => setMobileOpen(true)}
+          action={
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCommandOpen(true)}
+                className="header-command"
+                aria-label="Open command palette"
+              >
+                <Search size={14} />
+                <span>Search</span>
+                <kbd>
+                  <Command size={10} />K
+                </kbd>
+              </button>
+              <button
+                onClick={() =>
+                  setTheme((value) => (value === "dark" ? "light" : "dark"))
+                }
+                className="icon-button"
+                aria-label={`Switch to ${
+                  theme === "dark" ? "light" : "dark"
+                } theme`}
+              >
+                {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+              </button>
+              <button
+                onClick={() => navigate("landing")}
+                className="hidden items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-900 xl:flex"
+              >
+                <Home size={14} />
+                Product site
+              </button>
+            </div>
+          }
+        />
+        <div key={screen} ref={scrollRef} className="page-transition">
+          {screen === "overview" && (
+            <Dashboard
+              projects={projects}
+              navigate={navigate}
+              select={openProject}
+            />
+          )}
+          {screen === "projects" && (
+            <ProjectsScreen
+              projects={projects}
+              open={openProject}
+              remove={setDeleteTarget}
+              navigate={navigate}
+            />
+          )}
+          {screen === "new" && (
+            <ProjectForm
+              submit={createProject}
+              cancel={() => navigate("overview")}
+            />
+          )}
+          {screen === "council" && selected && (
+            <CouncilScreen project={selected} complete={completeCouncil} />
+          )}
+          {screen === "results" && selected && (
+            <Results project={selected} plan={() => navigate("plan")} />
+          )}
+          {screen === "plan" && selected && (
+            <PlanScreen
+              project={selected}
+              updateProject={updateProject}
+              notify={notify}
+            />
+          )}
+          {screen === "settings" && (
+            <SettingsScreen theme={theme} setTheme={setTheme} />
+          )}
+          {["council", "results", "plan"].includes(screen) && !selected && (
+            <MissingProject navigate={navigate} />
+          )}
+        </div>
+      </main>
+      <ConfirmationDialog
+        open={!!deleteTarget}
+        danger
+        title="Delete this project?"
+        description={`“${deleteTarget?.title}” and its local analysis will be permanently removed from this browser. This action cannot be undone.`}
+        confirmLabel="Delete project"
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={deleteProject}
+      />
+      <CommandPalette
+        open={commandOpen}
+        projects={projects}
+        onClose={() => setCommandOpen(false)}
+        navigate={navigate}
+        openProject={openProject}
+      />
+      <ToastViewport
+        items={toasts}
+        dismiss={(id) =>
+          setToasts((items) => items.filter((item) => item.id !== id))
+        }
+      />
+    </div>
+  )
+}
