@@ -7,13 +7,8 @@ export const hasNeon = Boolean(authUrl && dataApiUrl)
 
 export const neonClient = hasNeon
   ? createClient({
-      auth: {
-        adapter: SupabaseAuthAdapter(),
-        url: authUrl!,
-      },
-      dataApi: {
-        url: dataApiUrl!,
-      },
+      auth: { url: authUrl! },
+      dataApi: { url: dataApiUrl! },
     })
   : null
 

@@ -16,6 +16,12 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+function extractUser(result: any): AuthUser | null {
+  const account = result?.data?.user ?? result?.user ?? result?.data?.session?.user ?? result?.session?.user
+  if (!account?.id) return null
+  return { id: account.id, email: account.email ?? null }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -26,48 +32,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     let active = true
-    neonClient.auth.getSession().then(({ data }) => {
-      if (!active) return
-      const sessionUser = data.session?.user
-      setUser(
-        sessionUser ? { id: sessionUser.id, email: sessionUser.email ?? null } : null,
-      )
-      setLoading(false)
-    })
-    const { data: subscription } = neonClient.auth.onAuthStateChange((_event, session) => {
-      const sessionUser = session?.user
-      setUser(
-        sessionUser ? { id: sessionUser.id, email: sessionUser.email ?? null } : null,
-      )
-    })
-    return () => {
-      active = false
-      subscription.subscription.unsubscribe()
-    }
+    ;(async () => {
+      try {
+        const result = await neonClient.auth.getSession()
+        if (!active) return
+        const account = extractUser(result)?.id ? extractUser(result)! : null
+        setUser(account)
+      } catch {
+        if (!active) return
+        setUser(null)
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+
   }, [])
 
   const signIn = async (email: string, password: string) => {
     if (!neonClient) return "Neon is not configured"
-    const { data, error } = await neonClient.auth.signInWithPassword({ email, password })
-    const sessionUser = (data as any)?.session?.user ?? (data as any)?.user
-    if (sessionUser?.id) setUser({ id: sessionUser.id, email: sessionUser.email ?? email })
-    return error?.message ?? null
+    try {
+      const result = await neonClient.auth.signIn.email({ email, password })
+      const account = extractUser(result)
+      if (account) setUser(account)
+      return (result as any)?.error?.message ?? null
+    } catch (error) {
+      return String(error)
+    }
   }
 
   const signUp = async (email: string, password: string) => {
     if (!neonClient) return "Neon is not configured"
-    const { error: signUpError } = await neonClient.auth.signUp({ email, password }) as any
-    if (signUpError?.message) return signUpError.message
-    const { data: sessionData, error: signInError } = await neonClient.auth.signInWithPassword({ email, password })
-    if (signInError?.message) return signInError.message
-    const sessionUser = (sessionData as any)?.session?.user ?? (sessionData as any)?.user
-    if (sessionUser?.id) setUser({ id: sessionUser.id, email: sessionUser.email ?? email })
-    return null
+    try {
+      const result = await neonClient.auth.signUp.email({ email, password, name: email.split("@")[0] })
+      const account = extractUser(result)
+      if (account) setUser(account)
+      return (result as any)?.error?.message ?? null
+    } catch (error) {
+      return String(error)
+    }
   }
 
   const signOut = async () => {
     if (!neonClient) return
-    await neonClient.auth.signOut()
+    try {
+      await neonClient.auth.signOut()
+    } finally {
+      setUser(null)
+    }
   }
 
   return (
