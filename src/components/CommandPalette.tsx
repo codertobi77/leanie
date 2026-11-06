@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  BarChart3,
   FileText,
   LayoutDashboard,
   Plus,
@@ -55,6 +56,13 @@ export function CommandPalette({
         hint: "Navigate",
         icon: Settings,
         run: () => navigate("settings"),
+      },
+      {
+        id: "admin",
+        label: "Open admin metrics",
+        hint: "Navigate",
+        icon: BarChart3,
+        run: () => navigate("admin"),
       },
       ...projects.map((project) => ({
         id: project.id,

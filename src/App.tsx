@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  BarChart3,
   Bot,
   BrainCircuit,
   CalendarDays,
@@ -28,7 +29,9 @@ import {
   Menu,
   Moon,
   MoreHorizontal,
+  Play,
   Plus,
+  RotateCw,
   Rocket,
   Scale,
   Search,
@@ -52,7 +55,17 @@ import {
   type ToastKind,
 } from "./components/Toast"
 import { analysts, cloneDemoPlan, demoProject } from "./data"
-import type { Phase, Project, ProjectFormData, Risk, Screen, Task } from "./types"
+import type {
+  MetricsPayload,
+  ModelMetrics,
+  ModelRun,
+  Phase,
+  Project,
+  ProjectFormData,
+  Risk,
+  Screen,
+  Task,
+} from "./types"
 import { useAuth } from "./lib/auth"
 import { hasNeon, requireNeon, neonClient } from "./lib/neon"
 import {
@@ -86,6 +99,7 @@ const navItems: { id: Screen; label: string; icon: typeof Home }[] = [
   { id: "projects", label: "My Projects", icon: FileText },
   { id: "new", label: "New Project", icon: Plus },
   { id: "settings", label: "Settings", icon: Settings },
+  { id: "admin", label: "Admin", icon: BarChart3 },
 ]
 
 function fmtDate(value: string) {
@@ -2898,6 +2912,365 @@ function Setting({
   )
 }
 
+const sampleBrief = {
+  title: "Admin model benchmark",
+  objective:
+    "Evaluate council output quality and latency on a standard sample brief used for model comparison.",
+  context: "Internal benchmark run from the admin console.",
+  outcome: "A comparable phased plan used to score models consistently.",
+}
+
+function AdminScreen({
+  notify,
+}: {
+  notify: (kind: ToastKind, title: string, message?: string) => void
+}) {
+  const metricsUrl = import.meta.env.VITE_NEON_FUNCTION_METRICS_BASE_URL as
+    | string
+    | undefined
+  const councilUrl = import.meta.env.VITE_NEON_FUNCTION_COUNCIL_BASE_URL as
+    | string
+    | undefined
+  const [data, setData] = useState<MetricsPayload | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [testModel, setTestModel] = useState(
+    "google/diffusiongemma-26b-a4b-it",
+  )
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<any>(null)
+
+  const load = useCallback(async () => {
+    if (!metricsUrl) {
+      setError(
+        "Metrics endpoint is not configured (VITE_NEON_FUNCTION_METRICS_BASE_URL).",
+      )
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch(metricsUrl)
+      if (!response.ok) throw new Error(`Metrics request failed (${response.status})`)
+      setData((await response.json()) as MetricsPayload)
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [metricsUrl])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const runTest = async () => {
+    if (!councilUrl || testing) return
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const response = await fetch(councilUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        body: JSON.stringify({ ...sampleBrief, step: "full", model: testModel }),
+      })
+      const payload = await response.json()
+      setTestResult(payload)
+      if (payload?.metrics)
+        notify(
+          "success",
+          "Test run complete",
+          `${payload.metrics.model} · ${payload.metrics.latencyMs} ms`,
+        )
+      else
+        notify("warning", "Test run finished", "The council returned no metrics (demo mode?).")
+    } catch (err) {
+      notify("error", "Test run failed", String(err))
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <div className="page max-w-5xl">
+      <p className="page-kicker">MODEL OBSERVABILITY</p>
+      <h2 className="page-title">Admin</h2>
+      <p className="page-subtitle">
+        Measure every Council model on analysis quality, risk relevance,
+        recommendation coherence, JSON compliance, latency and cost.
+      </p>
+
+      <div className="mt-6 flex items-center justify-between gap-3">
+        <p className="text-xs text-slate-500">
+          {data
+            ? `${data.models.length} model${data.models.length === 1 ? "" : "s"} · ${data.runs.length} recent run${data.runs.length === 1 ? "" : "s"}`
+            : "No data yet"}
+        </p>
+        <button onClick={load} className="btn-secondary" disabled={loading}>
+          <RotateCw size={14} className={loading ? "animate-spin" : ""} />
+          Refresh
+        </button>
+      </div>
+
+      {loading && <p className="mt-6 text-sm text-slate-500">Loading metrics…</p>}
+      {error && (
+        <div className="info-card info-amber mt-6">
+          <span>UNAVAILABLE</span>
+          <p>{error}</p>
+        </div>
+      )}
+
+      {data?.models.map((model) => (
+        <ModelCard key={model.model} model={model} />
+      ))}
+
+      {data && data.runs.length > 0 && (
+        <div className="dashboard-panel mt-8 overflow-x-auto">
+          <h3 className="text-sm font-semibold text-slate-950">Recent runs</h3>
+          <table className="mt-4 w-full text-left text-xs">
+            <thead className="text-slate-500">
+              <tr className="border-b border-slate-200">
+                <th className="py-2 pr-3 font-semibold">When</th>
+                <th className="py-2 pr-3 font-semibold">Model</th>
+                <th className="py-2 pr-3 font-semibold">Step</th>
+                <th className="py-2 pr-3 font-semibold">Mode</th>
+                <th className="py-2 pr-3 font-semibold">Latency</th>
+                <th className="py-2 pr-3 font-semibold">Tokens</th>
+                <th className="py-2 pr-3 font-semibold">Cost</th>
+                <th className="py-2 pr-3 font-semibold">JSON</th>
+                <th className="py-2 pr-3 font-semibold">Q / R / C</th>
+                <th className="py-2 pr-3 font-semibold">Brief</th>
+              </tr>
+            </thead>
+            <tbody className="text-slate-700">
+              {data.runs.map((run) => (
+                <tr key={run.id} className="border-b border-slate-100">
+                  <td className="whitespace-nowrap py-2 pr-3">
+                    {new Date(run.created_at).toLocaleString()}
+                  </td>
+                  <td className="break-all py-2 pr-3">{run.model}</td>
+                  <td className="py-2 pr-3">{run.step}</td>
+                  <td className="py-2 pr-3">
+                    <span
+                      className={`status ${run.mode === "error" ? "status-amber" : "status-green"}`}
+                    >
+                      {run.mode}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-3">{run.latency_ms ?? "—"} ms</td>
+                  <td className="py-2 pr-3">
+                    {Number(run.total_tokens ?? 0).toLocaleString()}
+                  </td>
+                  <td className="py-2 pr-3">
+                    ${Number(run.cost_usd ?? 0).toFixed(4)}
+                  </td>
+                  <td className="py-2 pr-3">
+                    {run.json_valid == null ? "—" : run.json_valid ? "✓" : "✗"}
+                  </td>
+                  <td className="py-2 pr-3">
+                    {run.analysis_quality ?? "—"} / {run.risk_relevance ?? "—"} /{" "}
+                    {run.coherence ?? "—"}
+                  </td>
+                  <td
+                    className="max-w-[180px] truncate py-2 pr-3"
+                    title={run.error ?? run.brief_title ?? ""}
+                  >
+                    {run.error ?? run.brief_title ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="dashboard-panel mt-8">
+        <h3 className="text-sm font-semibold text-slate-950">Model test bench</h3>
+        <p className="mt-1 text-xs text-slate-500">
+          Run a full Council analysis on a standard sample brief with any NVIDIA
+          NIM model id. Cold starts can take 10–30 seconds.
+        </p>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <input
+            value={testModel}
+            onChange={(event) => setTestModel(event.target.value)}
+            placeholder="vendor/model-id"
+            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+          />
+          <button onClick={runTest} className="btn-primary" disabled={testing}>
+            <Play size={14} />
+            {testing ? "Running…" : "Run test"}
+          </button>
+        </div>
+        {testResult && <TestResultView result={testResult} />}
+      </div>
+    </div>
+  )
+}
+
+function ModelCard({ model }: { model: ModelMetrics }) {
+  const scores = [
+    { label: "Analysis quality", value: model.avg_analysis_quality, suffix: "/100" },
+    { label: "Risk relevance", value: model.avg_risk_relevance, suffix: "/100" },
+    {
+      label: "Recommendation coherence",
+      value: model.avg_coherence,
+      suffix: "/100",
+    },
+    {
+      label: "JSON format compliance",
+      value: model.json_valid_rate,
+      suffix: "%",
+    },
+  ]
+  return (
+    <div className="dashboard-panel mt-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h3 className="break-all text-sm font-semibold text-slate-950">
+            {model.model}
+          </h3>
+          <p className="mt-1 text-xs text-slate-500">
+            {model.runs} run{model.runs === 1 ? "" : "s"} · last{" "}
+            {model.last_run_at ? fmtDate(model.last_run_at) : "—"}
+          </p>
+        </div>
+        <div className="flex gap-6 text-right">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Avg latency
+            </p>
+            <p className="text-lg font-semibold text-slate-900">
+              {model.avg_latency_ms ?? "—"}
+              <span className="text-xs font-normal text-slate-500"> ms</span>
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Total cost
+            </p>
+            <p className="text-lg font-semibold text-slate-900">
+              ${(model.total_cost_usd ?? 0).toFixed(4)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Tokens
+            </p>
+            <p className="text-lg font-semibold text-slate-900">
+              {Number(model.total_tokens ?? 0).toLocaleString()}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        {scores.map((score) => (
+          <ScoreBar
+            key={score.label}
+            label={score.label}
+            value={score.value}
+            suffix={score.suffix}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ScoreBar({
+  label,
+  value,
+  suffix,
+}: {
+  label: string
+  value: number | null
+  suffix: string
+}) {
+  const pct = value == null ? 0 : Math.max(0, Math.min(100, value))
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-slate-600">{label}</span>
+        <span className="font-semibold text-slate-900">
+          {value == null ? "—" : `${Math.round(value)}${suffix}`}
+        </span>
+      </div>
+      <div className="progress-track mt-2">
+        <span style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function TestResultView({ result }: { result: any }) {
+  const metrics = result?.metrics
+  return (
+    <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      {result?.mode === "demo" && (
+        <p className="text-xs font-medium text-amber-600">
+          Demo fallback{result?.error ? ` — ${result.error}` : "."}
+        </p>
+      )}
+      {metrics ? (
+        <>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <AdminStat label="Model" value={metrics.model} small />
+            <AdminStat label="Latency" value={`${metrics.latencyMs} ms`} />
+            <AdminStat
+              label="Tokens"
+              value={(metrics.tokens?.total ?? 0).toLocaleString()}
+            />
+            <AdminStat label="Cost" value={`$${(metrics.costUsd ?? 0).toFixed(4)}`} />
+            <AdminStat
+              label="JSON"
+              value={metrics.jsonValid ? "Valid" : "Invalid"}
+            />
+            <AdminStat
+              label="Phases"
+              value={String(result?.phases?.length ?? 0)}
+            />
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            Quality {metrics.scores?.analysisQuality ?? "—"}/100 · risk relevance{" "}
+            {metrics.scores?.riskRelevance ?? "—"}/100 · coherence{" "}
+            {metrics.scores?.coherence ?? "—"}/100 ·{" "}
+            {result?.risks?.length ?? 0} risks · {result?.assumptions?.length ?? 0}{" "}
+            assumptions
+          </p>
+        </>
+      ) : (
+        <p className="text-xs text-slate-500">
+          No metrics returned{result?.error ? ` — ${result.error}` : "."}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function AdminStat({
+  label,
+  value,
+  small,
+}: {
+  label: string
+  value: string
+  small?: boolean
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+        {label}
+      </p>
+      <p
+        className={`mt-1 font-semibold text-slate-900 ${small ? "break-all text-[11px]" : "text-sm"}`}
+      >
+        {value}
+      </p>
+    </div>
+  )
+}
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>(() => {
     const hash = location.hash.slice(1)
@@ -2957,6 +3330,7 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("leanie-theme", theme)
     document.documentElement.style.colorScheme = theme
+    document.documentElement.dataset.theme = theme
   }, [theme])
   useEffect(
     () =>
@@ -3152,11 +3526,17 @@ export default function App() {
   }
 
   if (screen === "landing")
-    return <Landing enter={(s = "overview") => navigate(s)} />
+    return (
+      <div className={`theme-${theme}`}>
+        <Landing enter={(s = "overview") => navigate(s)} />
+      </div>
+    )
   if (screen === "shared") {
     return (
-      <div className="page">
-        {sharedLoading ? "Loading shared plan..." : "Shared plan is unavailable."}
+      <div className={`theme-${theme}`}>
+        <div className="page">
+          {sharedLoading ? "Loading shared plan..." : "Shared plan is unavailable."}
+        </div>
       </div>
     )
   }
@@ -3169,7 +3549,9 @@ export default function App() {
           ? "New Project"
           : screen === "settings"
             ? "Settings"
-            : (selected?.title ?? "Project")
+            : screen === "admin"
+              ? "Admin"
+              : (selected?.title ?? "Project")
   return (
     <div
       className={`app-shell min-h-screen bg-[#f8f9fc] text-[#101827] theme-${theme}`}
@@ -3261,6 +3643,7 @@ export default function App() {
           {screen === "settings" && (
             <SettingsScreen theme={theme} setTheme={setTheme} />
           )}
+          {screen === "admin" && <AdminScreen notify={notify} />}
           {["council", "results", "plan"].includes(screen) && !selected && (
             <MissingProject navigate={navigate} />
           )}
