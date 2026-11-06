@@ -171,13 +171,21 @@ export async function refreshSharedProject(token: string) {
   const shareUrl = import.meta.env.VITE_NEON_FUNCTION_SHARE_BASE_URL as string | undefined
   if (!shareUrl) return null
   try {
+    console.log('refresh fetch from', shareUrl)
     const response = await fetch(`${shareUrl}?token=${encodeURIComponent(token)}`)
-    if (!response.ok) return null
-    return fromRow(await response.json())
+    if (!response.ok) {
+      console.log('refresh HTTP', response.status)
+      return null
+    }
+    const row = await response.json()
+    console.log('refresh result', row.title, 'revision', row.revision)
+    return fromRow(row)
   } catch {
+    console.log('refresh network error')
     return null
   }
 }
+
 export async function persistSharedProject(project: Project, token: string) {
   const shareUrl = import.meta.env.VITE_NEON_FUNCTION_SHARE_BASE_URL as string | undefined
   if (!shareUrl) return { status: "unavailable" as const }
