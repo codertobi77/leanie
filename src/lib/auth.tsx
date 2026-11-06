@@ -54,7 +54,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string) => {
     if (!neonClient) return "Neon is not configured"
-    const { error } = await neonClient.auth.signUp({ email, password })
+    const { data, error } = await neonClient.auth.signUp({ email, password }) as any
+    if (data?.user && !error) {
+      setUser({ id: data.user.id, email: data.user.email ?? email })
+    }
     return error?.message ?? null
   }
 
