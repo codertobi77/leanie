@@ -1679,11 +1679,15 @@ function PlanScreen({
   updateProject,
   notify,
   navigate,
+  shareToken,
+  onShareTokenCreated,
 }: {
   project: Project
   updateProject: (p: Project) => void
   notify: (kind: ToastKind, title: string, message?: string) => void
   navigate?: (s: Screen) => void
+  shareToken?: string | null
+  onShareTokenCreated?: (token: string) => void
 }) {
   const [expanded, setExpanded] = useState<string[]>(
     project.phases.map((p) => p.id),
@@ -1697,22 +1701,6 @@ function PlanScreen({
   const [dragOverTask, setDragOverTask] = useState<number | null>(null)
   const [newRiskTitle, setNewRiskTitle] = useState("")
   const [newSuccessCriterion, setNewSuccessCriterion] = useState("")
-  useEffect(() => {
-    const token = getActiveShareToken()
-    console.log('Plan polling token', token, 'project revision', project.revision)
-    if (!token) return
-    const interval = window.setInterval(async () => {
-      try {
-        const remote = await refreshSharedProject(token)
-        console.log('Plan poll remote', remote?.revision, remote?.updatedAt, remote?.title)
-        if (!remote || remote.id !== project.id || remote.revision === project.revision) return
-        updateProject(remote)
-      } catch {
-        // ignore transient collaboration polling errors
-      }
-    }, 4000)
-    return () => window.clearInterval(interval)
-  }, [project.id, project.revision, project.updatedAt, updateProject])
   const [replayStep, setReplayStep] = useState("strategic")
   const [replaying, setReplaying] = useState(false)
   const [shareUrl, setShareUrl] = useState("")
@@ -1720,6 +1708,20 @@ function PlanScreen({
   const [versions, setVersions] = useState<any[]>([])
   const [loadingVersions, setLoadingVersions] = useState(true)
   const auth = useAuth()
+  useEffect(() => {
+    const token = shareToken ?? getActiveShareToken()
+    if (!token) return
+    const interval = window.setInterval(async () => {
+      try {
+        const remote = await refreshSharedProject(token)
+        if (!remote || remote.id !== project.id || remote.revision === project.revision) return
+        updateProject(remote)
+      } catch {
+        // ignore transient collaboration polling errors
+      }
+    }, 4000)
+    return () => window.clearInterval(interval)
+  }, [project.id, project.revision, project.updatedAt, updateProject, shareToken])
 
   useEffect(() => {
     (loadProjectVersions(project.id))
@@ -2904,6 +2906,7 @@ export default function App() {
   })
   const [sharedLoading, setSharedLoading] = useState(false)
   const [sharedProject, setSharedProject] = useState<Project | null>(null)
+  const [shareToken, setShareToken] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(
@@ -2927,6 +2930,7 @@ export default function App() {
   useEffect(() => {
     let active = true
     setProjectsLoading(true)
+    setShareToken(null)
     loadProjects(auth.user?.id ?? null)
       .then((loaded) => {
         if (!active) return
@@ -2976,6 +2980,7 @@ export default function App() {
         setSharedProject(project)
         setProjects([project])
         setSelectedId(project.id)
+        setShareToken(token)
         setScreen("plan")
         history.replaceState(null, "", "#plan")
       })
@@ -3012,6 +3017,7 @@ export default function App() {
   }
   const openProject = (p: Project) => {
     setSelectedId(p.id)
+    setShareToken(null)
     navigate(
       p.status === "Analyzing"
         ? "council"
@@ -3106,7 +3112,7 @@ export default function App() {
   }
   const updateProject = (project: Project) => {
     const updated = { ...project, updatedAt: new Date().toISOString() }
-    const sharedToken = getActiveShareToken()
+    const sharedToken = shareToken
     if (sharedToken) {
       setProjects((items) => items.map((x) => (x.id === project.id ? updated : x)))
       persistSharedProject(updated, sharedToken).then((result) => {
