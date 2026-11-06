@@ -183,7 +183,7 @@ export async function persistSharedProject(project: Project, token: string) {
   if (!shareUrl) return { status: "unavailable" as const }
   try {
     const response = await fetch(shareUrl, {
-      method: "PUT",
+      method: "POST",
       headers: { "Content-Type": "text/plain;charset=UTF-8" },
       body: JSON.stringify({ token, project, revision: project.revision ?? 1 }),
     })

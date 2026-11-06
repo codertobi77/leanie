@@ -1699,10 +1699,12 @@ function PlanScreen({
   const [newSuccessCriterion, setNewSuccessCriterion] = useState("")
   useEffect(() => {
     const token = getActiveShareToken()
+    console.log('Plan polling token', token, 'project revision', project.revision)
     if (!token) return
     const interval = window.setInterval(async () => {
       try {
         const remote = await refreshSharedProject(token)
+        console.log('Plan poll remote', remote?.revision, remote?.updatedAt, remote?.title)
         if (!remote || remote.id !== project.id || remote.revision === project.revision) return
         updateProject(remote)
       } catch {
