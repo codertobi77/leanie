@@ -1,5 +1,10 @@
 export default async function leanieCouncil(request: Request): Promise<Response> {
-  const cors = { "content-type": "application/json", "access-control-allow-origin": "*" };
+  const cors = {
+    "content-type": "application/json",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-allow-headers": "Content-Type, Authorization",
+  };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (request.method !== "POST") return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: cors });
 

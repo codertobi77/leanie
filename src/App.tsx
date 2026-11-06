@@ -1286,8 +1286,7 @@ function CouncilScreen({
         const response = await fetch(baseUrl, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            "Content-Type": "text/plain;charset=UTF-8",
           },
           body: JSON.stringify({
             title: project.title,
@@ -1829,8 +1828,7 @@ function PlanScreen({
       const response = await fetch(baseUrl, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "Content-Type": "text/plain;charset=UTF-8",
         },
         body: JSON.stringify({
           step: replayStep,
