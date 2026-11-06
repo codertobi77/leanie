@@ -55,7 +55,7 @@ import type { SealedLiveQuery } from "@neon/realtime/client"
 import { Brand } from "./components/Brand"
 import { CommandPalette } from "./components/CommandPalette"
 import { ConfirmationDialog } from "./components/ConfirmationDialog"
-import { CouncilDiagram, type CouncilStage } from "./components/CouncilDiagram"
+import { AdminCouncilDiagram, CouncilDiagram, type CouncilStage } from "./components/CouncilDiagram"
 import {
   ToastViewport,
   type ToastItem,
@@ -77,6 +77,7 @@ import type {
   ProjectFormData,
   ProviderModel,
   Risk,
+  RunsResponse,
   Screen,
   Task,
 } from "./types"
@@ -2759,6 +2760,15 @@ function TaskRow({
   )
 }
 
+type SettingsTab = "appearance" | "account" | "data" | "about"
+
+const settingsTabs: { id: SettingsTab; label: string; icon: typeof Home }[] = [
+  { id: "appearance", label: "Appearance", icon: Sun },
+  { id: "account", label: "Account", icon: User },
+  { id: "data", label: "Data & privacy", icon: ShieldAlert },
+  { id: "about", label: "About", icon: Info },
+]
+
 function SettingsScreen({
   theme,
   setTheme,
@@ -2767,6 +2777,7 @@ function SettingsScreen({
   setTheme: (theme: "light" | "dark") => void
 }) {
   const auth = useAuth()
+  const [tab, setTab] = useState<SettingsTab>("appearance")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [authMessage, setAuthMessage] = useState<string | null>(null)
@@ -2790,118 +2801,144 @@ function SettingsScreen({
         Keep the experience comfortable and understand how this prototype
         handles data.
       </p>
+
+      <SubTabs
+        tabs={settingsTabs}
+        value={tab}
+        onChange={(id) => setTab(id as SettingsTab)}
+      />
+
       <div className="mt-9 space-y-4">
-        <Setting
-          icon={Sun}
-          title="Interface theme"
-          description="Choose how Leanie appears on this device."
-        >
-          <div className="segmented">
-            {(["light", "dark"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTheme(t)}
-                className={theme === t ? "selected" : ""}
-              >
-                {t === "light" ? "Light" : "Dark"}
-              </button>
-            ))}
-          </div>
-        </Setting>
-        <Setting
-          icon={Languages}
-          title="Language"
-          description="The prototype is currently available in English."
-        >
-          <select className="settings-select">
-            <option>English</option>
-          </select>
-        </Setting>
-        <Setting
-          icon={hasNeon ? CheckCircle2 : Bot}
-          title="Backend configuration"
-          description={
-            hasNeon
-              ? "Neon is configured for auth, project storage, council requests, and file exports."
-              : "Neon is not configured. Projects remain in this browser."
-          }
-        >
-          <span className={`status ${hasNeon ? "status-green" : "status-amber"}`}>
-            {hasNeon ? "Connected" : "Local only"}
-          </span>
-        </Setting>
-        <Setting
-          icon={Bot}
-          title="AI configuration"
-          description={
-            hasNeon
-              ? "Council requests are routed through the leanie-council Neon Edge Function. Secrets remain on Neon."
-              : "Council responses use deterministic demonstration data. No AI provider is connected."
-          }
-        >
-          <span className={`status ${hasNeon ? "status-blue" : "status-amber"}`}>
-            {hasNeon ? "Neon function" : "Simulation only"}
-          </span>
-        </Setting>
-        <Setting
-          icon={ShieldAlert}
-          title="Privacy & AI usage"
-          description={
-            hasNeon
-              ? "Authenticated projects are stored in Neon with row-level security. Anonymous sessions use this browser."
-              : "Projects are stored in your browser’s localStorage and are not synchronized or sent to a server."
-          }
-        >
-          <span className={`status ${hasNeon ? "status-green" : "status-green"}`}>
-            {hasNeon ? "RLS enabled" : "Local only"}
-          </span>
-        </Setting>
-        <Setting
-          icon={User}
-          title="Account"
-          description="Sign in to save projects and exports in Neon."
-        >
-          {auth.user ? (
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-500">{auth.user.email ?? auth.user.id}</span>
-              <button onClick={signOut} className="btn-secondary">
-                Sign out
-              </button>
-            </div>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email"
-                className="settings-select"
-              />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
-                className="settings-select"
-              />
-              <div className="flex gap-2">
-                <button onClick={signIn} className="btn-secondary" disabled={auth.loading}>
-                  Sign in
-                </button>
-                <button onClick={signUp} className="btn-primary" disabled={auth.loading}>
-                  Sign up
-                </button>
+        {tab === "appearance" && (
+          <>
+            <Setting
+              icon={Sun}
+              title="Interface theme"
+              description="Choose how Leanie appears on this device."
+            >
+              <div className="segmented">
+                {(["light", "dark"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTheme(t)}
+                    className={theme === t ? "selected" : ""}
+                  >
+                    {t === "light" ? "Light" : "Dark"}
+                  </button>
+                ))}
               </div>
-            </div>
-          )}
-        </Setting>
-        {authMessage && <p className="text-xs text-slate-500">{authMessage}</p>}
-        <Setting
-          icon={Info}
-          title="Application"
-          description="Leanie — Lean Intelligence Engine. Early-stage frontend prototype by LiteTECH Startup."
-        >
-          <span className="text-xs text-slate-400">Version 0.1</span>
-        </Setting>
+            </Setting>
+            <Setting
+              icon={Languages}
+              title="Language"
+              description="The prototype is currently available in English."
+            >
+              <select className="settings-select">
+                <option>English</option>
+              </select>
+            </Setting>
+          </>
+        )}
+
+        {tab === "account" && (
+          <>
+            <Setting
+              icon={User}
+              title="Account"
+              description="Sign in to save projects and exports in Neon."
+            >
+              {auth.user ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500">{auth.user.email ?? auth.user.id}</span>
+                  <button onClick={signOut} className="btn-secondary">
+                    Sign out
+                  </button>
+                </div>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Email"
+                    className="settings-select"
+                  />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Password"
+                    className="settings-select"
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={signIn} className="btn-secondary" disabled={auth.loading}>
+                      Sign in
+                    </button>
+                    <button onClick={signUp} className="btn-primary" disabled={auth.loading}>
+                      Sign up
+                    </button>
+                  </div>
+                </div>
+              )}
+            </Setting>
+            {authMessage && <p className="text-xs text-slate-500">{authMessage}</p>}
+          </>
+        )}
+
+        {tab === "data" && (
+          <>
+            <Setting
+              icon={hasNeon ? CheckCircle2 : Bot}
+              title="Backend configuration"
+              description={
+                hasNeon
+                  ? "Neon is configured for auth, project storage, council requests, and file exports."
+                  : "Neon is not configured. Projects remain in this browser."
+              }
+            >
+              <span className={`status ${hasNeon ? "status-green" : "status-amber"}`}>
+                {hasNeon ? "Connected" : "Local only"}
+              </span>
+            </Setting>
+            <Setting
+              icon={ShieldAlert}
+              title="Privacy & AI usage"
+              description={
+                hasNeon
+                  ? "Authenticated projects are stored in Neon with row-level security. Anonymous sessions use this browser."
+                  : "Projects are stored in your browser’s localStorage and are not synchronized or sent to a server."
+              }
+            >
+              <span className={`status ${hasNeon ? "status-green" : "status-green"}`}>
+                {hasNeon ? "RLS enabled" : "Local only"}
+              </span>
+            </Setting>
+          </>
+        )}
+
+        {tab === "about" && (
+          <>
+            <Setting
+              icon={Bot}
+              title="AI configuration"
+              description={
+                hasNeon
+                  ? "Council requests are routed through the leanie-council Neon Edge Function. Secrets remain on Neon."
+                  : "Council responses use deterministic demonstration data. No AI provider is connected."
+              }
+            >
+              <span className={`status ${hasNeon ? "status-blue" : "status-amber"}`}>
+                {hasNeon ? "Neon function" : "Simulation only"}
+              </span>
+            </Setting>
+            <Setting
+              icon={Info}
+              title="Application"
+              description="Leanie — Lean Intelligence Engine. Early-stage frontend prototype by LiteTECH Startup."
+            >
+              <span className="text-xs text-slate-400">Version 0.1</span>
+            </Setting>
+          </>
+        )}
       </div>
     </div>
   )
@@ -2969,10 +3006,51 @@ const emptyPlan: Record<CouncilStepName, CouncilConfigStep> = {
   arbiter: { providerId: "", model: "" },
 }
 
+const emptyRunsFilters = {
+  provider: "",
+  model: "",
+  step: "",
+  mode: "",
+  json: "",
+  q: "",
+  range: "all",
+}
+
 const PIPELINE_FLOW: CouncilStepName[] = ["strategic", "feasibility", "critique", "arbiter"]
 
 function modelIdOf(model: string | ProviderModel): string {
   return typeof model === "string" ? model : model.id
+}
+
+function SubTabs({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: { id: string; label: string; icon: typeof Home }[]
+  value: string
+  onChange: (id: string) => void
+}) {
+  return (
+    <div className="mt-6 flex flex-wrap gap-2" role="tablist">
+      {tabs.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          role="tab"
+          aria-selected={value === id}
+          onClick={() => onChange(id)}
+          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+            value === id
+              ? "border-slate-900 bg-slate-900 text-white"
+              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
+          }`}
+        >
+          <Icon size={14} />
+          {label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 function AdminScreen({
@@ -3009,24 +3087,11 @@ function AdminScreen({
         them live and publish the best setup to production.
       </p>
 
-      <div className="mt-6 flex flex-wrap gap-2" role="tablist">
-        {adminTabs.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
-              tab === id
-                ? "border-slate-900 bg-slate-900 text-white"
-                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
-            }`}
-          >
-            <Icon size={14} />
-            {label}
-          </button>
-        ))}
-      </div>
+      <SubTabs
+        tabs={adminTabs}
+        value={tab}
+        onChange={(id) => setTab(id as AdminTab)}
+      />
 
       {tab === "metrics" && <MetricsTab notify={notify} />}
       {tab === "council" && <CouncilTab notify={notify} providers={providers} />}
@@ -3048,8 +3113,13 @@ function MetricsTab({
   const [data, setData] = useState<MetricsPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [runsData, setRunsData] = useState<RunsResponse | null>(null)
+  const [runsLoading, setRunsLoading] = useState(true)
+  const [filters, setFilters] = useState(emptyRunsFilters)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(15)
 
-  const load = useCallback(async () => {
+  const loadModels = useCallback(async () => {
     if (!metricsUrl) {
       setError(
         "Metrics endpoint is not configured (VITE_NEON_FUNCTION_METRICS_BASE_URL).",
@@ -3071,8 +3141,69 @@ function MetricsTab({
   }, [metricsUrl])
 
   useEffect(() => {
-    load()
-  }, [load])
+    loadModels()
+  }, [loadModels])
+
+  // Runs are fetched server-side with filters + pagination; the query string
+  // is the single source of truth, debounced to avoid a request per keystroke.
+  const runsQuery = useMemo(() => {
+    const params = new URLSearchParams({
+      view: "runs",
+      page: String(page),
+      pageSize: String(pageSize),
+    })
+    for (const [key, value] of Object.entries(filters)) {
+      if (value && value !== "all") params.set(key, value)
+    }
+    return params.toString()
+  }, [filters, page, pageSize])
+
+  useEffect(() => {
+    if (!metricsUrl) return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      setRunsLoading(true)
+      try {
+        const response = await fetch(`${metricsUrl}?${runsQuery}`)
+        if (!response.ok) throw new Error(`Runs request failed (${response.status})`)
+        const payload = (await response.json()) as RunsResponse
+        if (!cancelled) setRunsData(payload)
+      } catch (err) {
+        if (!cancelled) notify("error", "Could not load runs", String(err))
+      } finally {
+        if (!cancelled) setRunsLoading(false)
+      }
+    }, 250)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [metricsUrl, runsQuery, notify])
+
+  const setFilter = (key: keyof typeof emptyRunsFilters, value: string) => {
+    setFilters((previous) => {
+      const next = { ...previous, [key]: value }
+      if (key === "provider") next.model = ""
+      return next
+    })
+    setPage(1)
+  }
+
+  const providerOptions = useMemo(
+    () => Array.from(new Set((data?.models ?? []).map((model) => model.provider))),
+    [data],
+  )
+  const modelOptions = useMemo(() => {
+    const models = data?.models ?? []
+    const scoped = filters.provider
+      ? models.filter((model) => model.provider === filters.provider)
+      : models
+    return Array.from(new Set(scoped.map((model) => model.model)))
+  }, [data, filters.provider])
+
+  const hasActiveFilters = Object.entries(filters).some(
+    ([key, value]) => value && value !== "all",
+  )
 
   return (
     <>
@@ -3080,10 +3211,10 @@ function MetricsTab({
       <div className="mt-6 flex items-center justify-between gap-3">
         <p className="text-xs text-slate-500">
           {data
-            ? `${data.models.length} model${data.models.length === 1 ? "" : "s"} · ${data.runs.length} recent run${data.runs.length === 1 ? "" : "s"}`
+            ? `${data.models.length} provider/model combination${data.models.length === 1 ? "" : "s"} measured`
             : "No data yet"}
         </p>
-        <button onClick={load} className="btn-secondary" disabled={loading}>
+        <button onClick={loadModels} className="btn-secondary" disabled={loading}>
           <RotateCw size={14} className={loading ? "animate-spin" : ""} />
           Refresh
         </button>
@@ -3098,71 +3229,211 @@ function MetricsTab({
       )}
 
       {data?.models.map((model) => (
-        <ModelCard key={model.model} model={model} />
+        <ModelCard key={`${model.provider}/${model.model}`} model={model} />
       ))}
 
-      {data && data.runs.length > 0 && (
-        <div className="dashboard-panel mt-8 overflow-x-auto">
+      <div className="dashboard-panel mt-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-slate-950">Recent runs</h3>
-          <table className="mt-4 w-full text-left text-xs">
-            <thead className="text-slate-500">
-              <tr className="border-b border-slate-200">
-                <th className="py-2 pr-3 font-semibold">When</th>
-                <th className="py-2 pr-3 font-semibold">Provider</th>
-                <th className="py-2 pr-3 font-semibold">Model</th>
-                <th className="py-2 pr-3 font-semibold">Step</th>
-                <th className="py-2 pr-3 font-semibold">Mode</th>
-                <th className="py-2 pr-3 font-semibold">Latency</th>
-                <th className="py-2 pr-3 font-semibold">Tokens</th>
-                <th className="py-2 pr-3 font-semibold">Cost</th>
-                <th className="py-2 pr-3 font-semibold">JSON</th>
-                <th className="py-2 pr-3 font-semibold">Q / R / C</th>
-                <th className="py-2 pr-3 font-semibold">Brief</th>
-              </tr>
-            </thead>
-            <tbody className="text-slate-700">
-              {data.runs.map((run) => (
-                <tr key={run.id} className="border-b border-slate-100">
-                  <td className="whitespace-nowrap py-2 pr-3">
-                    {new Date(run.created_at).toLocaleString()}
-                  </td>
-                  <td className="py-2 pr-3">{run.provider}</td>
-                  <td className="break-all py-2 pr-3">{run.model}</td>
-                  <td className="py-2 pr-3">{run.step}</td>
-                  <td className="py-2 pr-3">
-                    <span
-                      className={`status ${run.mode === "error" ? "status-amber" : "status-green"}`}
-                    >
-                      {run.mode}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-3">{run.latency_ms ?? "—"} ms</td>
-                  <td className="py-2 pr-3">
-                    {Number(run.total_tokens ?? 0).toLocaleString()}
-                  </td>
-                  <td className="py-2 pr-3">
-                    ${Number(run.cost_usd ?? 0).toFixed(4)}
-                  </td>
-                  <td className="py-2 pr-3">
-                    {run.json_valid == null ? "—" : run.json_valid ? "✓" : "✗"}
-                  </td>
-                  <td className="py-2 pr-3">
-                    {run.analysis_quality ?? "—"} / {run.risk_relevance ?? "—"} /{" "}
-                    {run.coherence ?? "—"}
-                  </td>
-                  <td
-                    className="max-w-[180px] truncate py-2 pr-3"
-                    title={run.error ?? run.brief_title ?? ""}
-                  >
-                    {run.error ?? run.brief_title ?? "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {runsData && (
+            <p className="text-xs text-slate-500">
+              {runsData.total} run{runsData.total === 1 ? "" : "s"} matched
+            </p>
+          )}
         </div>
-      )}
 
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <input
+            value={filters.q}
+            onChange={(event) => setFilter("q", event.target.value)}
+            placeholder="Search brief, model, error…"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 lg:col-span-2"
+          />
+          <select
+            value={filters.provider}
+            onChange={(event) => setFilter("provider", event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+          >
+            <option value="">All providers</option>
+            {providerOptions.map((provider) => (
+              <option key={provider} value={provider}>
+                {provider}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.model}
+            onChange={(event) => setFilter("model", event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+          >
+            <option value="">All models</option>
+            {modelOptions.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.step}
+            onChange={(event) => setFilter("step", event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+          >
+            <option value="">All steps</option>
+            {["full", "strategic", "feasibility", "critique", "arbiter", "probe"].map((step) => (
+              <option key={step} value={step}>
+                {step}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.mode}
+            onChange={(event) => setFilter("mode", event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+          >
+            <option value="">All modes</option>
+            {["live", "error", "demo"].map((mode) => (
+              <option key={mode} value={mode}>
+                {mode}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.json}
+            onChange={(event) => setFilter("json", event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+          >
+            <option value="">Any JSON result</option>
+            <option value="valid">JSON valid</option>
+            <option value="invalid">JSON invalid</option>
+          </select>
+          <select
+            value={filters.range}
+            onChange={(event) => setFilter("range", event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+          >
+            <option value="all">All time</option>
+            <option value="24h">Last 24 hours</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+          </select>
+          <button
+            onClick={() => {
+              setFilters(emptyRunsFilters)
+              setPage(1)
+            }}
+            className="btn-secondary"
+            disabled={!hasActiveFilters}
+          >
+            <X size={14} />
+            Reset filters
+          </button>
+        </div>
+
+        {runsLoading ? (
+          <p className="mt-5 text-xs text-slate-500">Loading runs…</p>
+        ) : runsData && runsData.runs.length > 0 ? (
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="text-slate-500">
+                <tr className="border-b border-slate-200">
+                  <th className="py-2 pr-3 font-semibold">When</th>
+                  <th className="py-2 pr-3 font-semibold">Provider</th>
+                  <th className="py-2 pr-3 font-semibold">Model</th>
+                  <th className="py-2 pr-3 font-semibold">Step</th>
+                  <th className="py-2 pr-3 font-semibold">Mode</th>
+                  <th className="py-2 pr-3 font-semibold">Latency</th>
+                  <th className="py-2 pr-3 font-semibold">Tokens</th>
+                  <th className="py-2 pr-3 font-semibold">Cost</th>
+                  <th className="py-2 pr-3 font-semibold">JSON</th>
+                  <th className="py-2 pr-3 font-semibold">Q / R / C</th>
+                  <th className="py-2 pr-3 font-semibold">Brief</th>
+                </tr>
+              </thead>
+              <tbody className="text-slate-700">
+                {runsData.runs.map((run) => (
+                  <tr key={run.id} className="border-b border-slate-100">
+                    <td className="whitespace-nowrap py-2 pr-3">
+                      {new Date(run.created_at).toLocaleString()}
+                    </td>
+                    <td className="py-2 pr-3">{run.provider}</td>
+                    <td className="break-all py-2 pr-3">{run.model}</td>
+                    <td className="py-2 pr-3">{run.step}</td>
+                    <td className="py-2 pr-3">
+                      <span
+                        className={`status ${run.mode === "error" ? "status-amber" : "status-green"}`}
+                      >
+                        {run.mode}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3">{run.latency_ms ?? "—"} ms</td>
+                    <td className="py-2 pr-3">
+                      {Number(run.total_tokens ?? 0).toLocaleString()}
+                    </td>
+                    <td className="py-2 pr-3">
+                      ${Number(run.cost_usd ?? 0).toFixed(4)}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {run.json_valid == null ? "—" : run.json_valid ? "✓" : "✗"}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {run.analysis_quality ?? "—"} / {run.risk_relevance ?? "—"} /{" "}
+                      {run.coherence ?? "—"}
+                    </td>
+                    <td
+                      className="max-w-[180px] truncate py-2 pr-3"
+                      title={run.error ?? run.brief_title ?? ""}
+                    >
+                      {run.error ?? run.brief_title ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="mt-5 text-xs text-slate-500">No runs match these filters.</p>
+        )}
+
+        {runsData && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span>
+                Page {runsData.page} of {runsData.pages}
+              </span>
+              <select
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value))
+                  setPage(1)
+                }}
+                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900"
+              >
+                {[10, 15, 25, 50].map((size) => (
+                  <option key={size} value={size}>
+                    {size} / page
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+                className="btn-secondary"
+                disabled={runsLoading || page <= 1}
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage((value) => Math.min(runsData.pages, value + 1))}
+                className="btn-secondary"
+                disabled={runsLoading || page >= runsData.pages}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </>
   )
 }
@@ -3359,27 +3630,67 @@ function CouncilTab({
         </div>
         {runId && realtimeEnabled ? (
           <BenchmarkMonitor runId={runId}>
-            {(run, connection) => (
-              <PipelineDiagram
-                plan={plan}
-                providers={providers}
-                onPlanChange={setPlan}
-                disabled={running}
-                run={run}
-                connection={connection}
-              />
-            )}
+            {(run, connection) => <AdminCouncilDiagram run={run} connection={connection} />}
           </BenchmarkMonitor>
         ) : (
-          <PipelineDiagram
-            plan={plan}
-            providers={providers}
-            onPlanChange={setPlan}
-            disabled={running}
-            run={null}
-            connection={runId ? "connecting" : null}
-          />
+          <AdminCouncilDiagram run={null} connection={runId ? "connecting" : null} />
         )}
+
+        <p className="mt-3 text-[11px] text-slate-400">
+          Assign a provider and model to each step below — click any node in
+          the diagram to inspect its live metrics during a run.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {PIPELINE_FLOW.map((step) => {
+            const provider = providers.find((item) => item.id === plan[step].providerId)
+            return (
+              <div key={step} className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  {COUNCIL_STEP_LABELS[step]}
+                </p>
+                <p className="mt-0.5 text-[11px] text-slate-500">{COUNCIL_STEP_HINTS[step]}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <select
+                    value={plan[step].providerId}
+                    onChange={(event) =>
+                      setPlan({
+                        ...plan,
+                        [step]: { providerId: event.target.value, model: "" },
+                      })
+                    }
+                    disabled={running}
+                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900"
+                  >
+                    <option value="">Provider…</option>
+                    {providers.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={plan[step].model}
+                    onChange={(event) =>
+                      setPlan({ ...plan, [step]: { ...plan[step], model: event.target.value } })
+                    }
+                    disabled={running || !plan[step].providerId}
+                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900"
+                  >
+                    <option value="">Model…</option>
+                    {(provider?.models ?? []).map((model) => {
+                      const id = modelIdOf(model)
+                      return (
+                        <option key={id} value={id}>
+                          {id}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       <div className="dashboard-panel mt-6">
@@ -3541,208 +3852,6 @@ function LiveRunView({
         ? "renewing"
         : status
   return <>{children(data?.[0] ?? null, connection)}</>
-}
-
-function PipelineDiagram({
-  plan,
-  providers,
-  onPlanChange,
-  disabled,
-  run,
-  connection,
-}: {
-  plan: Record<CouncilStepName, CouncilConfigStep>
-  providers: LeanieProvider[]
-  onPlanChange: (plan: Record<CouncilStepName, CouncilConfigStep>) => void
-  disabled: boolean
-  run: BenchmarkRunRow | null
-  connection: string | null
-}) {
-  const providerById = useMemo(
-    () => new Map(providers.map((provider) => [provider.id, provider])),
-    [providers],
-  )
-  const resolved = run?.config?.steps ?? {}
-
-  const nodeState = (
-    step: CouncilStepName,
-  ): { status: "idle" | "running" | "done" | "failed"; detail?: CouncilStepDetail } => {
-    const detail = (run?.steps ?? []).find((entry) => entry.step === step)
-    if (detail) return { status: detail.error ? "failed" : "done", detail }
-    if (run?.status === "running" && run.current_step === step) return { status: "running" }
-    return { status: "idle" }
-  }
-
-  const setStep = (step: CouncilStepName, patch: Partial<CouncilConfigStep>) => {
-    onPlanChange({ ...plan, [step]: { ...plan[step], ...patch } })
-  }
-
-  return (
-    <div className="mt-5">
-      {connection && (
-        <p className="mb-3 flex items-center gap-1.5 text-[11px] text-slate-400">
-          <Activity size={11} className={connection === "live" ? "text-emerald-500" : ""} />
-          Live connection: {connection}
-        </p>
-      )}
-      <div className="flex flex-wrap items-stretch gap-1.5">
-        <div className="flex w-40 shrink-0 flex-col rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Input</p>
-          <p className="mt-1 text-xs font-semibold text-slate-900">Brief</p>
-          <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{sampleBrief.title}</p>
-          <p className="mt-auto pt-2 text-[11px] text-slate-400">Standard sample brief</p>
-        </div>
-        {PIPELINE_FLOW.map((step) => {
-          const state = nodeState(step)
-          const providerName = resolved[step]?.provider ?? (plan[step].providerId ? providerById.get(plan[step].providerId)?.name : "") ?? ""
-          const modelName = resolved[step]?.model ?? plan[step].model
-          return (
-            <div key={step} className="flex items-stretch gap-1.5">
-              <span className="flex items-center text-slate-300">
-                <ArrowRight size={14} />
-              </span>
-              <div
-                className={`flex w-52 shrink-0 flex-col rounded-xl border p-3 ${
-                  state.status === "running"
-                    ? "border-amber-300 bg-amber-50"
-                    : state.status === "done"
-                      ? "border-emerald-300 bg-emerald-50"
-                      : state.status === "failed"
-                        ? "border-red-300 bg-red-50"
-                        : "border-slate-200 bg-white"
-                }`}
-              >
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                  Council step
-                </p>
-                <p className="mt-1 text-xs font-semibold text-slate-900">
-                  {COUNCIL_STEP_LABELS[step]}
-                </p>
-                <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">
-                  {COUNCIL_STEP_HINTS[step]}
-                </p>
-                <div className="mt-2 flex flex-col gap-1.5">
-                  <select
-                    value={plan[step].providerId}
-                    onChange={(event) => setStep(step, { providerId: event.target.value, model: "" })}
-                    disabled={disabled}
-                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900"
-                  >
-                    <option value="">Provider…</option>
-                    {providers.map((provider) => (
-                      <option key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={plan[step].model}
-                    onChange={(event) => setStep(step, { model: event.target.value })}
-                    disabled={disabled || !plan[step].providerId}
-                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900"
-                  >
-                    <option value="">Model…</option>
-                    {(providerById.get(plan[step].providerId)?.models ?? []).map((model) => {
-                      const id = modelIdOf(model)
-                      return (
-                        <option key={id} value={id}>
-                          {id}
-                        </option>
-                      )
-                    })}
-                  </select>
-                </div>
-                <div className="mt-auto pt-2">
-                  {state.status === "running" && (
-                    <p className="flex items-center gap-1.5 text-[11px] font-medium text-amber-600">
-                      <RotateCw size={11} className="animate-spin" />
-                      Running {modelName || "…"}
-                    </p>
-                  )}
-                  {state.status === "done" && state.detail && (
-                    <p className="text-[11px] font-medium text-emerald-700">
-                      ✓ {(state.detail.latencyMs / 1000).toFixed(1)}s ·{" "}
-                      {state.detail.totalTokens.toLocaleString()} tok · $
-                      {state.detail.costUsd.toFixed(4)}
-                    </p>
-                  )}
-                  {state.status === "failed" && state.detail && (
-                    <p className="truncate text-[11px] font-medium text-red-600" title={state.detail.error ?? ""}>
-                      ✗ {state.detail.error}
-                    </p>
-                  )}
-                  {state.status === "idle" && (
-                    <p className="truncate text-[11px] text-slate-400" title={providerName && modelName ? `${providerName} / ${modelName}` : "No model assigned — falls back to the default provider"}>
-                      {providerName && modelName ? `${providerName} · ${modelName}` : "Default provider"}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )
-        })}
-        <span className="flex items-center text-slate-300">
-          <ArrowRight size={14} />
-        </span>
-        <OutputNode run={run} />
-      </div>
-    </div>
-  )
-}
-
-function OutputNode({ run }: { run: BenchmarkRunRow | null }) {
-  const metrics = (run?.result?.metrics ?? null) as
-    | { latencyMs?: number; tokens?: { total?: number }; costUsd?: number; mode?: string; jsonValid?: boolean; scores?: { analysisQuality?: number | null; riskRelevance?: number | null; coherence?: number | null } }
-    | null
-  const finished = run?.status === "done" || run?.status === "failed"
-  return (
-    <div
-      className={`flex w-44 shrink-0 flex-col rounded-xl border p-3 ${
-        run?.status === "done"
-          ? "border-emerald-300 bg-emerald-50"
-          : run?.status === "failed"
-            ? "border-red-300 bg-red-50"
-            : run?.status === "running"
-              ? "border-amber-300 bg-amber-50"
-              : "border-slate-200 bg-slate-50"
-      }`}
-    >
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Output</p>
-      <p className="mt-1 text-xs font-semibold text-slate-900">Delivery plan</p>
-      <div className="mt-auto pt-2">
-        {run?.status === "running" && (
-          <p className="flex items-center gap-1.5 text-[11px] font-medium text-amber-600">
-            <RotateCw size={11} className="animate-spin" />
-            Streaming…
-          </p>
-        )}
-        {finished && metrics && (
-          <>
-            <p className={`text-[11px] font-medium ${run?.status === "done" ? "text-emerald-700" : "text-red-600"}`}>
-              {run?.status === "done" ? "✓" : "✗"} {(metrics.latencyMs ?? 0) / 1000 > 0
-                ? `${((metrics.latencyMs ?? 0) / 1000).toFixed(1)}s`
-                : "—"}{" "}
-              · {(metrics.tokens?.total ?? 0).toLocaleString()} tok · $
-              {(metrics.costUsd ?? 0).toFixed(4)}
-            </p>
-            <p className="mt-1 text-[11px] text-slate-500">
-              Q {metrics.scores?.analysisQuality ?? "—"} · R{" "}
-              {metrics.scores?.riskRelevance ?? "—"} · C{" "}
-              {metrics.scores?.coherence ?? "—"}
-            </p>
-          </>
-        )}
-        {finished && !metrics && run?.error && (
-          <p className="text-[11px] font-medium text-red-600" title={run.error}>
-            ✗ {run.error}
-          </p>
-        )}
-        {!finished && run?.status !== "running" && (
-          <p className="text-[11px] text-slate-400">Waiting for a run</p>
-        )}
-      </div>
-    </div>
-  )
 }
 
 function ProvidersTab({

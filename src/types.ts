@@ -103,7 +103,14 @@ export interface ModelMetrics {
 
 export interface MetricsPayload {
   models: ModelMetrics[]
+}
+
+export interface RunsResponse {
   runs: ModelRun[]
+  total: number
+  page: number
+  pageSize: number
+  pages: number
 }
 
 // ---- Multi-provider Council administration ----
