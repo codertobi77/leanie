@@ -53,7 +53,6 @@ function fromRow(row: any): Project {
 }
 
 export async function loadProjects(userId?: string | null): Promise<Project[]> {
-  setActiveShareToken(null)
   const queued = readOfflineQueue().map((item) => item.project)
   if (userId && neonClient) {
     try {
