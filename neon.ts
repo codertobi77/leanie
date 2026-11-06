@@ -13,6 +13,10 @@ export default defineConfig({
     storage: { name: "Lean Storage", source: "./neon/leanie-storage.ts" },
     share: { name: "Lean Share", source: "./neon/leanie-share.ts", env: { DATABASE_URL: process.env.DATABASE_URL! } },
     metrics: { name: "Lean Metrics", source: "./neon/leanie-metrics.ts", env: { DATABASE_URL: process.env.DATABASE_URL! } },
+    providers: { name: "Lean Providers", source: "./neon/leanie-providers.ts", env: { DATABASE_URL: process.env.DATABASE_URL! } },
+    configs: { name: "Lean Configs", source: "./neon/leanie-configs.ts", env: { DATABASE_URL: process.env.DATABASE_URL! } },
+    bench: { name: "Lean Bench", source: "./neon/leanie-bench.ts", env: { NVIDIA_NIM_API_KEY: process.env.NVIDIA_NIM_API_KEY!, NVIDIA_NIM_BASE_URL: process.env.NVIDIA_NIM_BASE_URL ?? "https://integrate.api.nvidia.com/v1", LEANIE_GLM_MODEL: process.env.LEANIE_GLM_MODEL ?? "z-ai/glm-5.3-flash", DATABASE_URL: process.env.DATABASE_URL!, LEANIE_PRICE_PROMPT_PER_1M: process.env.LEANIE_PRICE_PROMPT_PER_1M ?? "0.2", LEANIE_PRICE_COMPLETION_PER_1M: process.env.LEANIE_PRICE_COMPLETION_PER_1M ?? "0.6" } },
+    seal: { name: "Lean Seal", source: "./neon/leanie-seal.ts", env: { NEON_REALTIME_SECRET: process.env.NEON_REALTIME_SECRET!, NEON_REALTIME_DB: process.env.NEON_REALTIME_DB ?? "neondb" } },
   },
   buckets: {
     // "private" is the default; use "public_read" for anonymous reads

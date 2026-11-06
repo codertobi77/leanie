@@ -68,6 +68,7 @@ export interface ModelRun {
   id: number
   created_at: string
   model: string
+  provider: string
   step: string
   mode: string
   latency_ms: number | null
@@ -81,9 +82,13 @@ export interface ModelRun {
   coherence: number | null
   brief_title: string | null
   error: string | null
+  config_id: string | null
+  run_id: string | null
+  steps: CouncilStepDetail[] | null
 }
 
 export interface ModelMetrics {
+  provider: string
   model: string
   runs: number
   avg_latency_ms: number | null
@@ -99,4 +104,73 @@ export interface ModelMetrics {
 export interface MetricsPayload {
   models: ModelMetrics[]
   runs: ModelRun[]
+}
+
+// ---- Multi-provider Council administration ----
+
+export type CouncilStepName = "strategic" | "feasibility" | "critique" | "arbiter"
+
+export interface CouncilStepDetail {
+  step: string
+  provider: string
+  model: string
+  latencyMs: number
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  costUsd: number
+  jsonValid: boolean
+  error: string | null
+}
+
+export interface ProviderModel {
+  id: string
+  price_prompt_per_1m?: number
+  price_completion_per_1m?: number
+}
+
+export interface LeanieProvider {
+  id: string
+  name: string
+  baseUrl: string
+  apiKeyMasked: string
+  hasKey: boolean
+  models: ProviderModel[]
+  status: "testing" | "published"
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CouncilConfigStep {
+  providerId: string
+  model: string
+}
+
+export interface CouncilConfig {
+  id: string
+  name: string
+  steps: Partial<Record<CouncilStepName, CouncilConfigStep>>
+  status: "draft" | "published"
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BenchmarkRunConfig {
+  steps?: Partial<Record<CouncilStepName, { provider: string; model: string }>>
+  configId?: string | null
+  configName?: string | null
+  step?: string
+}
+
+export interface BenchmarkRunRow {
+  id: string
+  source: string
+  config: BenchmarkRunConfig
+  status: "running" | "done" | "failed"
+  current_step: CouncilStepName | null
+  steps: CouncilStepDetail[]
+  result: { metrics?: Record<string, unknown>; payload?: Record<string, unknown> } | null
+  error: string | null
+  created_at: string
+  updated_at: string
 }

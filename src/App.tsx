@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { ReactNode } from "react"
 import {
+  Activity,
   AlertCircle,
   ArrowDown,
   ArrowLeft,
@@ -7,6 +9,7 @@ import {
   ArrowUp,
   BarChart3,
   Bot,
+  Boxes,
   BrainCircuit,
   CalendarDays,
   Command,
@@ -16,6 +19,7 @@ import {
   ChevronRight,
   CircleDot,
   Clock3,
+  Cpu,
   Download,
   FileText,
   Gauge,
@@ -24,6 +28,7 @@ import {
   Info,
   Languages,
   LayoutDashboard,
+  Layers,
   Lightbulb,
   ListChecks,
   Menu,
@@ -45,6 +50,8 @@ import {
   X,
   Zap,
 } from "lucide-react"
+import { RealtimeProvider, useLiveQuery } from "@neon/realtime-react"
+import type { SealedLiveQuery } from "@neon/realtime/client"
 import { Brand } from "./components/Brand"
 import { CommandPalette } from "./components/CommandPalette"
 import { ConfirmationDialog } from "./components/ConfirmationDialog"
@@ -56,18 +63,31 @@ import {
 } from "./components/Toast"
 import { analysts, cloneDemoPlan, demoProject } from "./data"
 import type {
+  BenchmarkRunRow,
+  CouncilConfig,
+  CouncilConfigStep,
+  CouncilStepDetail,
+  CouncilStepName,
+  LeanieProvider,
   MetricsPayload,
   ModelMetrics,
   ModelRun,
   Phase,
   Project,
   ProjectFormData,
+  ProviderModel,
   Risk,
   Screen,
   Task,
 } from "./types"
 import { useAuth } from "./lib/auth"
 import { hasNeon, requireNeon, neonClient } from "./lib/neon"
+import {
+  realtimeClient,
+  realtimeEnabled,
+  fetchSealedBenchmarkRun,
+  callNeonFunction,
+} from "./lib/realtime"
 import {
   loadProjects,
   saveProject,
@@ -2920,7 +2940,104 @@ const sampleBrief = {
   outcome: "A comparable phased plan used to score models consistently.",
 }
 
+type AdminTab = "metrics" | "council" | "providers"
+
+const adminTabs: { id: AdminTab; label: string; icon: typeof Home }[] = [
+  { id: "metrics", label: "Metrics", icon: BarChart3 },
+  { id: "council", label: "AI Council", icon: Layers },
+  { id: "providers", label: "Providers", icon: Boxes },
+]
+
+const COUNCIL_STEP_LABELS: Record<CouncilStepName, string> = {
+  strategic: "Strategic Analyst",
+  feasibility: "Feasibility Analyst",
+  critique: "Critical Reviewer",
+  arbiter: "Arbiter",
+}
+
+const COUNCIL_STEP_HINTS: Record<CouncilStepName, string> = {
+  strategic: "Builds the phased execution plan from the brief.",
+  feasibility: "Challenges the plan against real constraints.",
+  critique: "Independent review: assumptions, risks, red flags.",
+  arbiter: "Synthesizes all perspectives into the final plan.",
+}
+
+const emptyPlan: Record<CouncilStepName, CouncilConfigStep> = {
+  strategic: { providerId: "", model: "" },
+  feasibility: { providerId: "", model: "" },
+  critique: { providerId: "", model: "" },
+  arbiter: { providerId: "", model: "" },
+}
+
+const PIPELINE_FLOW: CouncilStepName[] = ["strategic", "feasibility", "critique", "arbiter"]
+
+function modelIdOf(model: string | ProviderModel): string {
+  return typeof model === "string" ? model : model.id
+}
+
 function AdminScreen({
+  notify,
+}: {
+  notify: (kind: ToastKind, title: string, message?: string) => void
+}) {
+  const [tab, setTab] = useState<AdminTab>("metrics")
+  const [providers, setProviders] = useState<LeanieProvider[]>([])
+
+  const reloadProviders = useCallback(async () => {
+    try {
+      const payload = await callNeonFunction<{ providers: LeanieProvider[] }>(
+        import.meta.env.VITE_NEON_FUNCTION_PROVIDERS_BASE_URL as string | undefined,
+        null,
+        "GET",
+      )
+      setProviders(payload?.providers ?? [])
+    } catch {
+      // The Providers tab surfaces its own error state.
+    }
+  }, [])
+
+  useEffect(() => {
+    reloadProviders()
+  }, [reloadProviders])
+
+  return (
+    <div className="page max-w-5xl">
+      <p className="page-kicker">MODEL OBSERVABILITY</p>
+      <h2 className="page-title">Admin</h2>
+      <p className="page-subtitle">
+        Configure model providers, design Council configurations, benchmark
+        them live and publish the best setup to production.
+      </p>
+
+      <div className="mt-6 flex flex-wrap gap-2" role="tablist">
+        {adminTabs.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+              tab === id
+                ? "border-slate-900 bg-slate-900 text-white"
+                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
+            }`}
+          >
+            <Icon size={14} />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "metrics" && <MetricsTab notify={notify} />}
+      {tab === "council" && <CouncilTab notify={notify} providers={providers} />}
+      {tab === "providers" && (
+        <ProvidersTab notify={notify} providers={providers} reload={reloadProviders} />
+      )}
+    </div>
+  )
+}
+
+function MetricsTab({
   notify,
 }: {
   notify: (kind: ToastKind, title: string, message?: string) => void
@@ -2928,17 +3045,9 @@ function AdminScreen({
   const metricsUrl = import.meta.env.VITE_NEON_FUNCTION_METRICS_BASE_URL as
     | string
     | undefined
-  const councilUrl = import.meta.env.VITE_NEON_FUNCTION_COUNCIL_BASE_URL as
-    | string
-    | undefined
   const [data, setData] = useState<MetricsPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [testModel, setTestModel] = useState(
-    "google/diffusiongemma-26b-a4b-it",
-  )
-  const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<any>(null)
 
   const load = useCallback(async () => {
     if (!metricsUrl) {
@@ -2965,41 +3074,8 @@ function AdminScreen({
     load()
   }, [load])
 
-  const runTest = async () => {
-    if (!councilUrl || testing) return
-    setTesting(true)
-    setTestResult(null)
-    try {
-      const response = await fetch(councilUrl, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=UTF-8" },
-        body: JSON.stringify({ ...sampleBrief, step: "full", model: testModel }),
-      })
-      const payload = await response.json()
-      setTestResult(payload)
-      if (payload?.metrics)
-        notify(
-          "success",
-          "Test run complete",
-          `${payload.metrics.model} · ${payload.metrics.latencyMs} ms`,
-        )
-      else
-        notify("warning", "Test run finished", "The council returned no metrics (demo mode?).")
-    } catch (err) {
-      notify("error", "Test run failed", String(err))
-    } finally {
-      setTesting(false)
-    }
-  }
-
   return (
-    <div className="page max-w-5xl">
-      <p className="page-kicker">MODEL OBSERVABILITY</p>
-      <h2 className="page-title">Admin</h2>
-      <p className="page-subtitle">
-        Measure every Council model on analysis quality, risk relevance,
-        recommendation coherence, JSON compliance, latency and cost.
-      </p>
+    <>
 
       <div className="mt-6 flex items-center justify-between gap-3">
         <p className="text-xs text-slate-500">
@@ -3032,6 +3108,7 @@ function AdminScreen({
             <thead className="text-slate-500">
               <tr className="border-b border-slate-200">
                 <th className="py-2 pr-3 font-semibold">When</th>
+                <th className="py-2 pr-3 font-semibold">Provider</th>
                 <th className="py-2 pr-3 font-semibold">Model</th>
                 <th className="py-2 pr-3 font-semibold">Step</th>
                 <th className="py-2 pr-3 font-semibold">Mode</th>
@@ -3049,6 +3126,7 @@ function AdminScreen({
                   <td className="whitespace-nowrap py-2 pr-3">
                     {new Date(run.created_at).toLocaleString()}
                   </td>
+                  <td className="py-2 pr-3">{run.provider}</td>
                   <td className="break-all py-2 pr-3">{run.model}</td>
                   <td className="py-2 pr-3">{run.step}</td>
                   <td className="py-2 pr-3">
@@ -3085,27 +3163,840 @@ function AdminScreen({
         </div>
       )}
 
-      <div className="dashboard-panel mt-8">
-        <h3 className="text-sm font-semibold text-slate-950">Model test bench</h3>
+    </>
+  )
+}
+
+function CouncilTab({
+  notify,
+  providers,
+}: {
+  notify: (kind: ToastKind, title: string, message?: string) => void
+  providers: LeanieProvider[]
+}) {
+  const configsUrl = import.meta.env.VITE_NEON_FUNCTION_CONFIGS_BASE_URL as
+    | string
+    | undefined
+  const benchUrl = import.meta.env.VITE_NEON_FUNCTION_BENCH_BASE_URL as
+    | string
+    | undefined
+  const [configs, setConfigs] = useState<CouncilConfig[]>([])
+  const [loadingConfigs, setLoadingConfigs] = useState(true)
+  const [configId, setConfigId] = useState("")
+  const [configName, setConfigName] = useState("")
+  const [plan, setPlan] = useState<Record<CouncilStepName, CouncilConfigStep>>(emptyPlan)
+  const [saving, setSaving] = useState(false)
+  const [benchStep, setBenchStep] = useState<"full" | CouncilStepName>("full")
+  const [runId, setRunId] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+  const [finalResult, setFinalResult] = useState<any>(null)
+
+  const loadConfigs = useCallback(async () => {
+    if (!configsUrl) {
+      setLoadingConfigs(false)
+      return
+    }
+    setLoadingConfigs(true)
+    try {
+      const payload = await callNeonFunction<{ configs: CouncilConfig[] }>(
+        configsUrl,
+        null,
+        "GET",
+      )
+      setConfigs(payload?.configs ?? [])
+    } catch (err) {
+      notify("error", "Could not load configs", String(err))
+    } finally {
+      setLoadingConfigs(false)
+    }
+  }, [configsUrl, notify])
+
+  useEffect(() => {
+    loadConfigs()
+  }, [loadConfigs])
+
+  const loadConfigIntoEditor = (config: CouncilConfig) => {
+    setConfigId(config.id)
+    setConfigName(config.name)
+    setPlan({
+      ...emptyPlan,
+      ...Object.fromEntries(
+        PIPELINE_FLOW.map((step) => [
+          step,
+          config.steps?.[step] ?? { providerId: "", model: "" },
+        ]),
+      ),
+    } as Record<CouncilStepName, CouncilConfigStep>)
+  }
+
+  const newDraft = () => {
+    setConfigId("")
+    setConfigName("")
+    setPlan(emptyPlan)
+  }
+
+  const saveConfig = async () => {
+    if (!configsUrl || saving) return
+    setSaving(true)
+    try {
+      const payload = await callNeonFunction<{ id: string }>(configsUrl, {
+        action: "save",
+        id: configId || undefined,
+        name: configName,
+        steps: plan,
+      })
+      setConfigId(payload.id)
+      await loadConfigs()
+      notify("success", "Config saved", "Draft stored. Publish it to make it the production setup.")
+    } catch (err) {
+      notify("error", "Save failed", String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const publishConfig = async (id: string) => {
+    if (!configsUrl) return
+    setSaving(true)
+    try {
+      await callNeonFunction(configsUrl, { action: "publish", id })
+      await loadConfigs()
+      notify("success", "Config published", "The production Council now uses this configuration.")
+    } catch (err) {
+      notify("error", "Publish failed", String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const unpublishConfig = async () => {
+    if (!configsUrl) return
+    setSaving(true)
+    try {
+      await callNeonFunction(configsUrl, { action: "unpublish" })
+      await loadConfigs()
+      notify("success", "Config unpublished", "The Council falls back to the default provider.")
+    } catch (err) {
+      notify("error", "Unpublish failed", String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deleteConfig = async (id: string) => {
+    if (!configsUrl) return
+    setSaving(true)
+    try {
+      await callNeonFunction(configsUrl, { action: "delete", id })
+      if (configId === id) newDraft()
+      await loadConfigs()
+      notify("success", "Config deleted", "")
+    } catch (err) {
+      notify("error", "Delete failed", String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const startRun = async () => {
+    if (!benchUrl || running) return
+    const id = crypto.randomUUID()
+    setRunId(id)
+    setFinalResult(null)
+    setRunning(true)
+    try {
+      const payload = await callNeonFunction<any>(benchUrl, {
+        runId: id,
+        brief: sampleBrief,
+        step: benchStep,
+        configId: configId || undefined,
+        steps: plan,
+      })
+      setFinalResult(payload)
+      if (payload?.metrics) {
+        notify(
+          "success",
+          "Benchmark complete",
+          `${payload.metrics.provider ?? ""} · ${payload.metrics.model} · ${payload.metrics.latencyMs} ms`,
+        )
+      } else {
+        notify("warning", "Benchmark finished", "The bench returned no metrics.")
+      }
+    } catch (err) {
+      notify("error", "Benchmark failed", String(err))
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <>
+      {!realtimeEnabled && (
+        <div className="info-card info-amber mt-6">
+          <span>LIVE UPDATES OFF</span>
+          <p>
+            Realtime is not configured (VITE_NEON_REALTIME_URL). Benchmarks
+            still run, but progress only appears once the run completes.
+          </p>
+        </div>
+      )}
+
+      <div className="dashboard-panel mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-950">Council pipeline</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Assign a provider and model to every step, then benchmark the
+              whole configuration live.
+            </p>
+          </div>
+          {runId && (
+            <span className="status status-green">
+              <Activity size={12} />
+              run {runId.slice(0, 8)}
+            </span>
+          )}
+        </div>
+        {runId && realtimeEnabled ? (
+          <BenchmarkMonitor runId={runId}>
+            {(run, connection) => (
+              <PipelineDiagram
+                plan={plan}
+                providers={providers}
+                onPlanChange={setPlan}
+                disabled={running}
+                run={run}
+                connection={connection}
+              />
+            )}
+          </BenchmarkMonitor>
+        ) : (
+          <PipelineDiagram
+            plan={plan}
+            providers={providers}
+            onPlanChange={setPlan}
+            disabled={running}
+            run={null}
+            connection={runId ? "connecting" : null}
+          />
+        )}
+      </div>
+
+      <div className="dashboard-panel mt-6">
+        <h3 className="text-sm font-semibold text-slate-950">Run benchmark</h3>
         <p className="mt-1 text-xs text-slate-500">
-          Run a full Council analysis on a standard sample brief with any NVIDIA
-          NIM model id. Cold starts can take 10–30 seconds.
+          Runs the pipeline on a standard sample brief. Progress streams live
+          into the diagram above. Cold starts can take 10–30 seconds.
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <input
-            value={testModel}
-            onChange={(event) => setTestModel(event.target.value)}
-            placeholder="vendor/model-id"
-            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
-          />
-          <button onClick={runTest} className="btn-primary" disabled={testing}>
+          <select
+            value={benchStep}
+            onChange={(event) => setBenchStep(event.target.value as typeof benchStep)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+          >
+            <option value="full">Full council</option>
+            <option value="strategic">Strategic only</option>
+            <option value="feasibility">Feasibility only</option>
+            <option value="critique">Critique only</option>
+            <option value="arbiter">Arbiter (full + synthesis)</option>
+          </select>
+          <button onClick={startRun} className="btn-primary" disabled={running}>
             <Play size={14} />
-            {testing ? "Running…" : "Run test"}
+            {running ? "Running…" : "Run benchmark"}
           </button>
         </div>
-        {testResult && <TestResultView result={testResult} />}
+        {finalResult && <TestResultView result={finalResult} />}
+      </div>
+
+      <div className="dashboard-panel mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-950">Configurations</h3>
+          <button onClick={newDraft} className="btn-secondary">
+            <Plus size={14} />
+            New draft
+          </button>
+        </div>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <input
+            value={configName}
+            onChange={(event) => setConfigName(event.target.value)}
+            placeholder="Configuration name"
+            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+          />
+          <div className="flex gap-2">
+            <button onClick={saveConfig} className="btn-secondary" disabled={saving}>
+              {saving ? "Saving…" : "Save draft"}
+            </button>
+            {configId && (
+              <button
+                onClick={() => configs.find((c) => c.id === configId)?.status === "published"
+                  ? unpublishConfig()
+                  : publishConfig(configId)}
+                className="btn-primary"
+                disabled={saving}
+              >
+                {configs.find((c) => c.id === configId)?.status === "published"
+                  ? "Unpublish"
+                  : "Publish"}
+              </button>
+            )}
+          </div>
+        </div>
+        {loadingConfigs ? (
+          <p className="mt-4 text-xs text-slate-500">Loading configurations…</p>
+        ) : configs.length === 0 ? (
+          <p className="mt-4 text-xs text-slate-500">
+            No saved configuration yet. Assign providers above and save a draft.
+          </p>
+        ) : (
+          <ul className="mt-4 divide-y divide-slate-100">
+            {configs.map((config) => (
+              <li key={config.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-xs font-semibold text-slate-900">
+                    {config.name}
+                    {config.status === "published" && (
+                      <span className="status status-green">published</span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                    {PIPELINE_FLOW.map((step) => config.steps?.[step]?.model || "—").join(" · ")}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => loadConfigIntoEditor(config)} className="btn-secondary">
+                    Load
+                  </button>
+                  <button
+                    onClick={() => deleteConfig(config.id)}
+                    className="btn-secondary text-red-600"
+                    aria-label={`Delete ${config.name}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
+  )
+}
+
+function BenchmarkMonitor({
+  runId,
+  children,
+}: {
+  runId: string
+  children: (run: BenchmarkRunRow | null, connection: string) => ReactNode
+}) {
+  const [sealed, setSealed] = useState<SealedLiveQuery<BenchmarkRunRow> | null>(null)
+  const [sealError, setSealError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setSealed(null)
+    setSealError(null)
+    fetchSealedBenchmarkRun(runId).then(
+      (sealedQuery) => {
+        if (!cancelled) setSealed(sealedQuery)
+      },
+      (error: unknown) => {
+        if (!cancelled) setSealError(String(error))
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [runId])
+
+  if (sealError) return <>{children(null, `unavailable — ${sealError}`)}</>
+  if (!sealed) return <>{children(null, "connecting")}</>
+  return (
+    <RealtimeProvider client={realtimeClient!}>
+      <LiveRunView sealedQuery={sealed} runId={runId}>
+        {children}
+      </LiveRunView>
+    </RealtimeProvider>
+  )
+}
+
+function LiveRunView({
+  sealedQuery,
+  runId,
+  children,
+}: {
+  sealedQuery: SealedLiveQuery<BenchmarkRunRow>
+  runId: string
+  children: (run: BenchmarkRunRow | null, connection: string) => ReactNode
+}) {
+  const refreshQuery = useCallback(() => fetchSealedBenchmarkRun(runId), [runId])
+  const { data, status, error } = useLiveQuery(sealedQuery, { refreshQuery })
+  const connection = error
+    ? `error — ${error.message}`
+    : status === "live"
+      ? "live"
+      : status === "stale"
+        ? "renewing"
+        : status
+  return <>{children(data?.[0] ?? null, connection)}</>
+}
+
+function PipelineDiagram({
+  plan,
+  providers,
+  onPlanChange,
+  disabled,
+  run,
+  connection,
+}: {
+  plan: Record<CouncilStepName, CouncilConfigStep>
+  providers: LeanieProvider[]
+  onPlanChange: (plan: Record<CouncilStepName, CouncilConfigStep>) => void
+  disabled: boolean
+  run: BenchmarkRunRow | null
+  connection: string | null
+}) {
+  const providerById = useMemo(
+    () => new Map(providers.map((provider) => [provider.id, provider])),
+    [providers],
+  )
+  const resolved = run?.config?.steps ?? {}
+
+  const nodeState = (
+    step: CouncilStepName,
+  ): { status: "idle" | "running" | "done" | "failed"; detail?: CouncilStepDetail } => {
+    const detail = (run?.steps ?? []).find((entry) => entry.step === step)
+    if (detail) return { status: detail.error ? "failed" : "done", detail }
+    if (run?.status === "running" && run.current_step === step) return { status: "running" }
+    return { status: "idle" }
+  }
+
+  const setStep = (step: CouncilStepName, patch: Partial<CouncilConfigStep>) => {
+    onPlanChange({ ...plan, [step]: { ...plan[step], ...patch } })
+  }
+
+  return (
+    <div className="mt-5">
+      {connection && (
+        <p className="mb-3 flex items-center gap-1.5 text-[11px] text-slate-400">
+          <Activity size={11} className={connection === "live" ? "text-emerald-500" : ""} />
+          Live connection: {connection}
+        </p>
+      )}
+      <div className="flex flex-wrap items-stretch gap-1.5">
+        <div className="flex w-40 shrink-0 flex-col rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Input</p>
+          <p className="mt-1 text-xs font-semibold text-slate-900">Brief</p>
+          <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{sampleBrief.title}</p>
+          <p className="mt-auto pt-2 text-[11px] text-slate-400">Standard sample brief</p>
+        </div>
+        {PIPELINE_FLOW.map((step) => {
+          const state = nodeState(step)
+          const providerName = resolved[step]?.provider ?? (plan[step].providerId ? providerById.get(plan[step].providerId)?.name : "") ?? ""
+          const modelName = resolved[step]?.model ?? plan[step].model
+          return (
+            <div key={step} className="flex items-stretch gap-1.5">
+              <span className="flex items-center text-slate-300">
+                <ArrowRight size={14} />
+              </span>
+              <div
+                className={`flex w-52 shrink-0 flex-col rounded-xl border p-3 ${
+                  state.status === "running"
+                    ? "border-amber-300 bg-amber-50"
+                    : state.status === "done"
+                      ? "border-emerald-300 bg-emerald-50"
+                      : state.status === "failed"
+                        ? "border-red-300 bg-red-50"
+                        : "border-slate-200 bg-white"
+                }`}
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Council step
+                </p>
+                <p className="mt-1 text-xs font-semibold text-slate-900">
+                  {COUNCIL_STEP_LABELS[step]}
+                </p>
+                <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">
+                  {COUNCIL_STEP_HINTS[step]}
+                </p>
+                <div className="mt-2 flex flex-col gap-1.5">
+                  <select
+                    value={plan[step].providerId}
+                    onChange={(event) => setStep(step, { providerId: event.target.value, model: "" })}
+                    disabled={disabled}
+                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900"
+                  >
+                    <option value="">Provider…</option>
+                    {providers.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={plan[step].model}
+                    onChange={(event) => setStep(step, { model: event.target.value })}
+                    disabled={disabled || !plan[step].providerId}
+                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900"
+                  >
+                    <option value="">Model…</option>
+                    {(providerById.get(plan[step].providerId)?.models ?? []).map((model) => {
+                      const id = modelIdOf(model)
+                      return (
+                        <option key={id} value={id}>
+                          {id}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+                <div className="mt-auto pt-2">
+                  {state.status === "running" && (
+                    <p className="flex items-center gap-1.5 text-[11px] font-medium text-amber-600">
+                      <RotateCw size={11} className="animate-spin" />
+                      Running {modelName || "…"}
+                    </p>
+                  )}
+                  {state.status === "done" && state.detail && (
+                    <p className="text-[11px] font-medium text-emerald-700">
+                      ✓ {(state.detail.latencyMs / 1000).toFixed(1)}s ·{" "}
+                      {state.detail.totalTokens.toLocaleString()} tok · $
+                      {state.detail.costUsd.toFixed(4)}
+                    </p>
+                  )}
+                  {state.status === "failed" && state.detail && (
+                    <p className="truncate text-[11px] font-medium text-red-600" title={state.detail.error ?? ""}>
+                      ✗ {state.detail.error}
+                    </p>
+                  )}
+                  {state.status === "idle" && (
+                    <p className="truncate text-[11px] text-slate-400" title={providerName && modelName ? `${providerName} / ${modelName}` : "No model assigned — falls back to the default provider"}>
+                      {providerName && modelName ? `${providerName} · ${modelName}` : "Default provider"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+        <span className="flex items-center text-slate-300">
+          <ArrowRight size={14} />
+        </span>
+        <OutputNode run={run} />
       </div>
     </div>
+  )
+}
+
+function OutputNode({ run }: { run: BenchmarkRunRow | null }) {
+  const metrics = (run?.result?.metrics ?? null) as
+    | { latencyMs?: number; tokens?: { total?: number }; costUsd?: number; mode?: string; jsonValid?: boolean; scores?: { analysisQuality?: number | null; riskRelevance?: number | null; coherence?: number | null } }
+    | null
+  const finished = run?.status === "done" || run?.status === "failed"
+  return (
+    <div
+      className={`flex w-44 shrink-0 flex-col rounded-xl border p-3 ${
+        run?.status === "done"
+          ? "border-emerald-300 bg-emerald-50"
+          : run?.status === "failed"
+            ? "border-red-300 bg-red-50"
+            : run?.status === "running"
+              ? "border-amber-300 bg-amber-50"
+              : "border-slate-200 bg-slate-50"
+      }`}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Output</p>
+      <p className="mt-1 text-xs font-semibold text-slate-900">Delivery plan</p>
+      <div className="mt-auto pt-2">
+        {run?.status === "running" && (
+          <p className="flex items-center gap-1.5 text-[11px] font-medium text-amber-600">
+            <RotateCw size={11} className="animate-spin" />
+            Streaming…
+          </p>
+        )}
+        {finished && metrics && (
+          <>
+            <p className={`text-[11px] font-medium ${run?.status === "done" ? "text-emerald-700" : "text-red-600"}`}>
+              {run?.status === "done" ? "✓" : "✗"} {(metrics.latencyMs ?? 0) / 1000 > 0
+                ? `${((metrics.latencyMs ?? 0) / 1000).toFixed(1)}s`
+                : "—"}{" "}
+              · {(metrics.tokens?.total ?? 0).toLocaleString()} tok · $
+              {(metrics.costUsd ?? 0).toFixed(4)}
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Q {metrics.scores?.analysisQuality ?? "—"} · R{" "}
+              {metrics.scores?.riskRelevance ?? "—"} · C{" "}
+              {metrics.scores?.coherence ?? "—"}
+            </p>
+          </>
+        )}
+        {finished && !metrics && run?.error && (
+          <p className="text-[11px] font-medium text-red-600" title={run.error}>
+            ✗ {run.error}
+          </p>
+        )}
+        {!finished && run?.status !== "running" && (
+          <p className="text-[11px] text-slate-400">Waiting for a run</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ProvidersTab({
+  notify,
+  providers,
+  reload,
+}: {
+  notify: (kind: ToastKind, title: string, message?: string) => void
+  providers: LeanieProvider[]
+  reload: () => Promise<void>
+}) {
+  const providersUrl = import.meta.env.VITE_NEON_FUNCTION_PROVIDERS_BASE_URL as
+    | string
+    | undefined
+  const [name, setName] = useState("")
+  const [baseUrl, setBaseUrl] = useState("")
+  const [apiKey, setApiKey] = useState("")
+  const [creating, setCreating] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [testModels, setTestModels] = useState<Record<string, string>>({})
+  const [testResults, setTestResults] = useState<
+    Record<string, { ok: boolean; latencyMs: number; tokens: { prompt: number; completion: number; total: number }; error: string | null } | null>
+  >({})
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
+  const act = async (body: Record<string, unknown>, success?: [string, string]) => {
+    if (!providersUrl) {
+      notify("error", "Not configured", "VITE_NEON_FUNCTION_PROVIDERS_BASE_URL is missing.")
+      return false
+    }
+    setBusyId(String(body.id ?? ""))
+    try {
+      await callNeonFunction(providersUrl, body)
+      await reload()
+      if (success) notify("success", success[0], success[1])
+      return true
+    } catch (err) {
+      notify("error", "Provider action failed", String(err))
+      return false
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const createProvider = async () => {
+    if (!name.trim() || !baseUrl.trim() || creating) return
+    setCreating(true)
+    const ok = await act({ action: "create", name, baseUrl, apiKey }, [
+      "Provider created",
+      "Fetch its models, then test one before publishing.",
+    ])
+    if (ok) {
+      setName("")
+      setBaseUrl("")
+      setApiKey("")
+    }
+    setCreating(false)
+  }
+
+  const testProviderModel = async (provider: LeanieProvider) => {
+    const model = testModels[provider.id]
+    if (!model) {
+      notify("warning", "Pick a model", "Select a model to test first.")
+      return
+    }
+    setBusyId(provider.id)
+    setTestResults((previous) => ({ ...previous, [provider.id]: null }))
+    try {
+      const result = await callNeonFunction<{
+        ok: boolean
+        latencyMs: number
+        tokens: { prompt: number; completion: number; total: number }
+        error: string | null
+      }>(providersUrl, { action: "test", id: provider.id, model })
+      setTestResults((previous) => ({ ...previous, [provider.id]: result }))
+      notify(
+        result.ok ? "success" : "warning",
+        result.ok ? "Model responds" : "Model test failed",
+        result.ok
+          ? `${model} · ${result.latencyMs} ms · ${result.tokens.total} tokens`
+          : result.error ?? "Unknown error",
+      )
+    } catch (err) {
+      notify("error", "Test failed", String(err))
+      setTestResults((previous) => ({
+        ...previous,
+        [provider.id]: { ok: false, latencyMs: 0, tokens: { prompt: 0, completion: 0, total: 0 }, error: String(err) },
+      }))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <>
+      <div className="dashboard-panel mt-6">
+        <h3 className="text-sm font-semibold text-slate-950">Add a provider</h3>
+        <p className="mt-1 text-xs text-slate-500">
+          Any OpenAI-compatible chat endpoint works: NVIDIA NIM, OpenRouter,
+          Groq, Together, Ollama, OpenAI… API keys are stored server-side and
+          never sent back to the browser.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Display name (e.g. NVIDIA NIM)"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+          />
+          <input
+            value={baseUrl}
+            onChange={(event) => setBaseUrl(event.target.value)}
+            placeholder="Base URL (e.g. https://integrate.api.nvidia.com/v1)"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+          />
+          <input
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+            placeholder="API key (nvapi-…)"
+            type="password"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 sm:col-span-2"
+          />
+        </div>
+        <button
+          onClick={createProvider}
+          className="btn-primary mt-4"
+          disabled={creating || !name.trim() || !baseUrl.trim()}
+        >
+          <Plus size={14} />
+          {creating ? "Creating…" : "Create provider"}
+        </button>
+      </div>
+
+      {providers.length === 0 ? (
+        <p className="mt-6 text-sm text-slate-500">
+          No provider configured yet. Add one above to power the Council.
+        </p>
+      ) : (
+        providers.map((provider) => {
+          const busy = busyId === provider.id
+          const testResult = testResults[provider.id]
+          return (
+            <div key={provider.id} className="dashboard-panel mt-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                    <Cpu size={15} className="text-slate-400" />
+                    {provider.name}
+                    <span className={`status ${provider.status === "published" ? "status-green" : "status-amber"}`}>
+                      {provider.status}
+                    </span>
+                  </p>
+                  <p className="mt-1 break-all text-xs text-slate-500">{provider.baseUrl}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-400">
+                    Key {provider.hasKey ? provider.apiKeyMasked : "not set"} ·{" "}
+                    {provider.models.length} model{provider.models.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => act({ action: "models", id: provider.id }, [
+                      "Models fetched",
+                      `${provider.name}: model list refreshed.`,
+                    ])}
+                    className="btn-secondary"
+                    disabled={busy}
+                  >
+                    <RotateCw size={14} className={busy ? "animate-spin" : ""} />
+                    Fetch models
+                  </button>
+                  <button
+                    onClick={() =>
+                      act(
+                        { action: "publish", id: provider.id, published: provider.status !== "published" },
+                        provider.status === "published"
+                          ? ["Provider unpublished", `${provider.name} moved back to testing.`]
+                          : ["Provider published", `${provider.name} is now available to configs.`],
+                      )
+                    }
+                    className="btn-secondary"
+                    disabled={busy}
+                  >
+                    {provider.status === "published" ? "Unpublish" : "Publish"}
+                  </button>
+                  {confirmDeleteId === provider.id ? (
+                    <button
+                      onClick={() => {
+                        setConfirmDeleteId(null)
+                        act({ action: "delete", id: provider.id }, ["Provider deleted", provider.name])
+                      }}
+                      className="btn-secondary text-red-600"
+                      disabled={busy}
+                    >
+                      Confirm delete
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteId(provider.id)}
+                      className="btn-secondary text-red-600"
+                      aria-label={`Delete ${provider.name}`}
+                      disabled={busy}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {provider.models.length > 0 && (
+                <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:items-center">
+                  <select
+                    value={testModels[provider.id] ?? ""}
+                    onChange={(event) =>
+                      setTestModels((previous) => ({ ...previous, [provider.id]: event.target.value }))
+                    }
+                    className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+                  >
+                    <option value="">Choose a model to test…</option>
+                    {provider.models.map((model) => {
+                      const id = modelIdOf(model)
+                      return (
+                        <option key={id} value={id}>
+                          {id}
+                        </option>
+                      )
+                    })}
+                  </select>
+                  <button
+                    onClick={() => testProviderModel(provider)}
+                    className="btn-secondary"
+                    disabled={busy || !testModels[provider.id]}
+                  >
+                    <Play size={14} />
+                    {busy ? "Testing…" : "Test"}
+                  </button>
+                </div>
+              )}
+              {testResult && (
+                <div
+                  className={`mt-3 rounded-lg border p-3 text-xs ${
+                    testResult.ok
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-red-200 bg-red-50 text-red-700"
+                  }`}
+                >
+                  {testResult.ok
+                    ? `✓ Responded in ${testResult.latencyMs} ms · ${testResult.tokens.total} tokens (${testResult.tokens.prompt} prompt / ${testResult.tokens.completion} completion)`
+                    : `✗ ${testResult.error ?? "Test failed"}`}
+                </div>
+              )}
+            </div>
+          )
+        })
+      )}
+    </>
   )
 }
 
@@ -3132,7 +4023,7 @@ function ModelCard({ model }: { model: ModelMetrics }) {
             {model.model}
           </h3>
           <p className="mt-1 text-xs text-slate-500">
-            {model.runs} run{model.runs === 1 ? "" : "s"} · last{" "}
+            {model.provider} · {model.runs} run{model.runs === 1 ? "" : "s"} · last{" "}
             {model.last_run_at ? fmtDate(model.last_run_at) : "—"}
           </p>
         </div>
@@ -3215,6 +4106,11 @@ function TestResultView({ result }: { result: any }) {
       {metrics ? (
         <>
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <AdminStat
+              label="Provider"
+              value={metrics.configName ?? metrics.provider ?? "—"}
+              small
+            />
             <AdminStat label="Model" value={metrics.model} small />
             <AdminStat label="Latency" value={`${metrics.latencyMs} ms`} />
             <AdminStat
@@ -3225,10 +4121,6 @@ function TestResultView({ result }: { result: any }) {
             <AdminStat
               label="JSON"
               value={metrics.jsonValid ? "Valid" : "Invalid"}
-            />
-            <AdminStat
-              label="Phases"
-              value={String(result?.phases?.length ?? 0)}
             />
           </div>
           <p className="mt-3 text-xs text-slate-500">

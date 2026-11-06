@@ -14,6 +14,7 @@
     "@neon/config": "^1.11.3",
     "@neon/env": "^1.6.15",
     "@neon/realtime": "^0.2.0",
+    "@neon/realtime-react": "^0.2.0",
     "@neondatabase/neon-js": "0.9.0-beta",
     "lucide-react": "^1.69.0",
     "react": "^19.0.0",
