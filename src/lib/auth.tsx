@@ -48,17 +48,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     if (!neonClient) return "Neon is not configured"
-    const { error } = await neonClient.auth.signInWithPassword({ email, password })
+    const { data, error } = await neonClient.auth.signInWithPassword({ email, password })
+    const sessionUser = (data as any)?.session?.user ?? (data as any)?.user
+    if (sessionUser?.id) setUser({ id: sessionUser.id, email: sessionUser.email ?? email })
     return error?.message ?? null
   }
 
   const signUp = async (email: string, password: string) => {
     if (!neonClient) return "Neon is not configured"
-    const { data, error } = await neonClient.auth.signUp({ email, password }) as any
-    if (data?.user && !error) {
-      setUser({ id: data.user.id, email: data.user.email ?? email })
-    }
-    return error?.message ?? null
+    const { error: signUpError } = await neonClient.auth.signUp({ email, password }) as any
+    if (signUpError?.message) return signUpError.message
+    const { data: sessionData, error: signInError } = await neonClient.auth.signInWithPassword({ email, password })
+    if (signInError?.message) return signInError.message
+    const sessionUser = (sessionData as any)?.session?.user ?? (sessionData as any)?.user
+    if (sessionUser?.id) setUser({ id: sessionUser.id, email: sessionUser.email ?? email })
+    return null
   }
 
   const signOut = async () => {
