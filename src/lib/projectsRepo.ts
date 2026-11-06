@@ -171,8 +171,9 @@ export async function refreshSharedProject(token: string) {
   const shareUrl = import.meta.env.VITE_NEON_FUNCTION_SHARE_BASE_URL as string | undefined
   if (!shareUrl) return null
   try {
-    console.log('refresh fetch from', shareUrl)
-    const response = await fetch(`${shareUrl}?token=${encodeURIComponent(token)}`)
+    const fullUrl = `${shareUrl}?token=${encodeURIComponent(token)}`
+    console.log('refresh fetch from', fullUrl)
+    const response = await fetch(fullUrl)
     if (!response.ok) {
       console.log('refresh HTTP', response.status)
       return null
