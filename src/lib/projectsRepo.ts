@@ -142,6 +142,16 @@ export async function createProjectShare(projectId: string, token: string, userI
 }
 
 export async function loadSharedProject(token: string) {
+  const shareUrl = import.meta.env.VITE_NEON_FUNCTION_SHARE_BASE_URL as string | undefined
+  if (shareUrl) {
+    try {
+      const response = await fetch(`${shareUrl}?token=${encodeURIComponent(token)}`)
+      if (!response.ok) return null
+      return fromRow(await response.json())
+    } catch {
+      return null
+    }
+  }
   if (!neonClient) return null
   const { data: share, error: shareError } = await neonClient.from("leanie_shares").select("*").eq("token", token).single()
   if (shareError || !share) return null
