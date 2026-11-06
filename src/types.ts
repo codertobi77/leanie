@@ -43,6 +43,7 @@ export interface Project {
   assumptions?: string[]
   successCriteria?: string[]
   tags?: string[]
+  revision?: number
 }
 
 export interface ProjectFormData {

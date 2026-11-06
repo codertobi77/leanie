@@ -24,6 +24,7 @@ function toRow(project: Project, userId: string) {
     assumptions: project.assumptions ?? [],
     success_criteria: project.successCriteria ?? [],
     tags: project.tags ?? [],
+    revision: project.revision ?? 1,
     created_at: project.createdAt,
     updated_at: project.updatedAt,
   }
@@ -47,10 +48,12 @@ function fromRow(row: any): Project {
     assumptions: asArray<string>(row.assumptions),
     successCriteria: asArray<string>(row.success_criteria),
     tags: asArray<string>(row.tags),
+    revision: Number(row.revision ?? 1),
   }
 }
 
 export async function loadProjects(userId?: string | null): Promise<Project[]> {
+  setActiveShareToken(null)
   if (userId && neonClient) {
     const { data, error } = await neonClient
       .from("leanie_projects")
@@ -135,13 +138,46 @@ export async function syncOfflineProjects() {
 
 export async function createProjectShare(projectId: string, token: string, userId?: string | null) {
   if (!userId || !neonClient) return null
-  const toRowShare = { project_id: projectId, token, role: "viewer", created_by: userId }
+  const toRowShare = { project_id: projectId, token, role: "editor", created_by: userId }
   const { data, error } = await neonClient.from("leanie_shares").insert(toRowShare).select().single()
   if (error) return null
   return data as any
 }
 
+let activeShareToken: string | null = null
+export function setActiveShareToken(token: string | null) { activeShareToken = token }
+export function getActiveShareToken() { return activeShareToken }
+export async function refreshSharedProject(token: string) {
+  const shareUrl = import.meta.env.VITE_NEON_FUNCTION_SHARE_BASE_URL as string | undefined
+  if (!shareUrl) return null
+  try {
+    const response = await fetch(`${shareUrl}?token=${encodeURIComponent(token)}`)
+    if (!response.ok) return null
+    return fromRow(await response.json())
+  } catch {
+    return null
+  }
+}
+export async function persistSharedProject(project: Project, token: string) {
+  const shareUrl = import.meta.env.VITE_NEON_FUNCTION_SHARE_BASE_URL as string | undefined
+  if (!shareUrl) return { status: "unavailable" as const }
+  try {
+    const response = await fetch(shareUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify({ token, project, revision: project.revision ?? 1 }),
+    })
+    const data = await response.json()
+    if (response.status === 409 && data.current) return { status: "conflict" as const, project: fromRow(data.current) }
+    if (!response.ok) return { status: "error" as const, error: data.error }
+    return { status: "ok" as const, project: fromRow(data) }
+  } catch (error) {
+    return { status: "network" as const, error: String(error) }
+  }
+}
+
 export async function loadSharedProject(token: string) {
+  setActiveShareToken(token)
   const shareUrl = import.meta.env.VITE_NEON_FUNCTION_SHARE_BASE_URL as string | undefined
   if (shareUrl) {
     try {

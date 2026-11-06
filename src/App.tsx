@@ -65,6 +65,9 @@ import {
   saveProjectVersion,
   loadProjectVersions,
   queueProjectForSync,
+  getActiveShareToken,
+  persistSharedProject,
+  refreshSharedProject,
 } from "./lib/projectsRepo"
 
 const STORAGE_KEY = "leanie-projects-v1"
@@ -1693,6 +1696,20 @@ function PlanScreen({
   const [dragOverTask, setDragOverTask] = useState<number | null>(null)
   const [newRiskTitle, setNewRiskTitle] = useState("")
   const [newSuccessCriterion, setNewSuccessCriterion] = useState("")
+  useEffect(() => {
+    const token = getActiveShareToken()
+    if (!token) return
+    const interval = window.setInterval(async () => {
+      try {
+        const remote = await refreshSharedProject(token)
+        if (!remote || remote.id !== project.id || remote.revision === project.revision) return
+        updateProject(remote)
+      } catch {
+        // ignore transient collaboration polling errors
+      }
+    }, 4000)
+    return () => window.clearInterval(interval)
+  }, [project.id, project.revision, project.updatedAt, updateProject])
   const [replayStep, setReplayStep] = useState("strategic")
   const [replaying, setReplaying] = useState(false)
   const [shareUrl, setShareUrl] = useState("")
@@ -3085,6 +3102,24 @@ export default function App() {
   }
   const updateProject = (project: Project) => {
     const updated = { ...project, updatedAt: new Date().toISOString() }
+    const sharedToken = getActiveShareToken()
+    if (sharedToken) {
+      setProjects((items) => items.map((x) => (x.id === project.id ? updated : x)))
+      persistSharedProject(updated, sharedToken).then((result) => {
+        if (result.status === "conflict" && result.project) {
+          setProjects((items) => items.map((x) => (x.id === project.id ? result.project! : x)))
+          notify("error", "Conflict resolved", "Someone else updated the plan first. Your view has been refreshed.")
+          return
+        }
+        if (result.status === "ok" && result.project) {
+          setProjects((items) => items.map((x) => (x.id === project.id ? result.project! : x)))
+        }
+        if (result.status === "error" || result.status === "network") {
+          notify("error", "Share update failed", result.error ?? "Could not update the shared plan.")
+        }
+      })
+      return
+    }
     setProjects((p) => p.map((x) => (x.id === project.id ? updated : x)))
     saveProject(updated, auth.user?.id ?? null).then(() => {
       if (auth.user) saveProjectVersion(updated, "updated", auth.user.id)
