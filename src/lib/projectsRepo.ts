@@ -69,11 +69,16 @@ export async function loadProjects(userId?: string | null): Promise<Project[]> {
 
 export async function saveProject(project: Project, userId?: string | null): Promise<void> {
   if (userId && neonClient) {
-    const { error } = await neonClient
-      .from("leanie_projects")
-      .upsert(toRow(project, userId), { onConflict: "id" })
-    if (error) throw error
-    return
+    try {
+      const { error } = await neonClient
+        .from("leanie_projects")
+        .upsert(toRow(project, userId), { onConflict: "id" })
+      if (error) throw error
+      return
+    } catch (error) {
+      queueProjectForSync(project, userId)
+      throw error
+    }
   }
   const current = await loadProjects(null)
   const next = current.some((p) => p.id === project.id)
@@ -93,4 +98,77 @@ export async function removeProject(id: string, userId?: string | null): Promise
     STORAGE_KEY,
     JSON.stringify(current.filter((p) => p.id !== id)),
   )
+}
+
+const OFFLINE_QUEUE_KEY = "leanie-offline-queue"
+
+function readOfflineQueue(): Array<{ userId: string; project: Project }> {
+  try {
+    return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]") as Array<{ userId: string; project: Project }>
+  } catch {
+    return []
+  }
+}
+
+export function queueProjectForSync(project: Project, userId: string) {
+  const queue = readOfflineQueue().filter((item) => !(item.userId === userId && item.project.id === project.id))
+  queue.push({ userId, project })
+  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue))
+}
+
+export async function syncOfflineProjects() {
+  if (!neonClient) return
+  let queue = readOfflineQueue()
+  if (!queue.length) return
+  const remaining: Array<{ userId: string; project: Project }> = []
+  for (const item of queue) {
+    try {
+      const row = toRow(item.project, item.userId)
+      const { error } = await neonClient.from("leanie_projects").upsert(row, { onConflict: "id" })
+      if (error) throw error
+    } catch {
+      remaining.push(item)
+    }
+  }
+  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(remaining))
+}
+
+export async function createProjectShare(projectId: string, token: string, userId?: string | null) {
+  if (!userId || !neonClient) return null
+  const toRowShare = { project_id: projectId, token, role: "viewer", created_by: userId }
+  const { data, error } = await neonClient.from("leanie_shares").insert(toRowShare).select().single()
+  if (error) return null
+  return data as any
+}
+
+export async function loadSharedProject(token: string) {
+  if (!neonClient) return null
+  const { data: share, error: shareError } = await neonClient.from("leanie_shares").select("*").eq("token", token).single()
+  if (shareError || !share) return null
+  const { data: project, error: projectError } = await neonClient.from("leanie_projects").select("*").eq("id", share.project_id).single()
+  if (projectError || !project) return null
+  return fromRow(project)
+}
+
+export async function saveProjectVersion(project: Project, action: string, userId?: string | null) {
+  if (!userId || !neonClient) return
+  await neonClient.from("leanie_versions").insert({
+    project_id: project.id,
+    snapshot: project,
+    action,
+    created_by: userId,
+  })
+}
+
+export async function loadProjectVersions(projectId: string) {
+  if (!neonClient) return []
+  const { data, error } = await neonClient.from("leanie_versions").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(25)
+  if (error) return []
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    action: row.action,
+    createdAt: row.created_at,
+    createdBy: row.created_by ?? undefined,
+    snapshot: row.snapshot as Project,
+  }))
 }

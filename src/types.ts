@@ -1,4 +1,4 @@
-export type Screen = "landing" | "overview" | "projects" | "new" | "council" | "results" | "plan" | "settings"
+export type Screen = "landing" | "overview" | "projects" | "new" | "council" | "results" | "plan" | "settings" | "shared"
 export type ProjectStatus = "Draft" | "Analyzing" | "Plan ready" | "Validated"
 
 export interface Task {

@@ -55,7 +55,17 @@ import { analysts, cloneDemoPlan, demoProject } from "./data"
 import type { Phase, Project, ProjectFormData, Risk, Screen, Task } from "./types"
 import { useAuth } from "./lib/auth"
 import { hasNeon, requireNeon, neonClient } from "./lib/neon"
-import { loadProjects, saveProject, removeProject } from "./lib/projectsRepo"
+import {
+  loadProjects,
+  saveProject,
+  removeProject,
+  syncOfflineProjects,
+  createProjectShare,
+  loadSharedProject,
+  saveProjectVersion,
+  loadProjectVersions,
+  queueProjectForSync,
+} from "./lib/projectsRepo"
 
 const STORAGE_KEY = "leanie-projects-v1"
 const blankForm: ProjectFormData = {
@@ -837,16 +847,19 @@ function ProjectsScreen({
   open,
   remove,
   navigate,
+  onImport,
 }: {
   projects: Project[]
   open: (p: Project) => void
   remove: (p: Project) => void
   navigate: (s: Screen) => void
+  onImport: (file: File) => void
 }) {
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState("all")
   const [sort, setSort] = useState("updated-desc")
   const [tag, setTag] = useState("")
+  const importRef = useRef<HTMLInputElement>(null)
   const filtered = useMemo(() => {
     let next = [...projects]
     if (query.trim()) {
@@ -882,10 +895,27 @@ function ProjectsScreen({
             Plans and analyses ({projects.length}) · {filtered.length} shown
           </p>
         </div>
-        <button onClick={() => navigate("new")} className="btn-primary">
-          <Plus size={16} />
-          New project
-        </button>
+        <div className="flex gap-2">
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) onImport(file)
+              event.target.value = ""
+            }}
+          />
+          <button onClick={() => importRef.current?.click()} className="btn-secondary">
+            <Download size={16} />
+            Import
+          </button>
+          <button onClick={() => navigate("new")} className="btn-primary">
+            <Plus size={16} />
+            New project
+          </button>
+        </div>
       </div>
       <div className="mt-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-600 md:grid-cols-[1fr_auto_auto_auto]">
         <input
@@ -1665,6 +1695,62 @@ function PlanScreen({
   const [newSuccessCriterion, setNewSuccessCriterion] = useState("")
   const [replayStep, setReplayStep] = useState("strategic")
   const [replaying, setReplaying] = useState(false)
+  const [shareUrl, setShareUrl] = useState("")
+  const [sharing, setSharing] = useState(false)
+  const [versions, setVersions] = useState<any[]>([])
+  const [loadingVersions, setLoadingVersions] = useState(true)
+  const auth = useAuth()
+
+  useEffect(() => {
+    (loadProjectVersions(project.id))
+      .then(setVersions)
+      .catch(() => setVersions([]))
+      .finally(() => setLoadingVersions(false))
+  }, [project.id])
+
+  const createShare = async () => {
+    if (!auth.user) {
+      notify("info", "Sign in required", "Sign in to create a share link.")
+      return
+    }
+    setSharing(true)
+    try {
+      const token = crypto.randomUUID()
+      await createProjectShare(project.id, token, auth.user.id)
+      const url = `${window.location.origin}${window.location.pathname}#shared/${token}`
+      setShareUrl(url)
+      await navigator.clipboard.writeText(url).catch(() => {})
+      notify("success", "Share link created", url)
+    } catch (error) {
+      notify("error", "Share failed", String(error))
+    } finally {
+      setSharing(false)
+    }
+  }
+
+  const exportJson = () => {
+    const content = JSON.stringify(project, null, 2)
+    const blob = new Blob([content], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${project.title.replace(/\\W+/g, "-").toLowerCase()}.json`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    notify("success", "JSON exported", "The project snapshot was downloaded.")
+  }
+
+  const importProject = async (file: File) => {
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+      notify("info", "Import loaded", "Use the app data to create a project.")
+    } catch (error) {
+      notify("error", "Import failed", String(error))
+    }
+  }
   const allTasks = project.phases.flatMap((phase) => phase.tasks)
   const completedTasks = allTasks.filter((task) => task.completed).length
   const progress = allTasks.length
@@ -2382,6 +2468,54 @@ function PlanScreen({
               </button>
             </div>
           </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <h3 className="text-sm font-semibold">Sharing & versions</h3>
+            <p className="mt-2 text-[11px] leading-5 text-slate-500">
+              Share the current plan and restore a previous snapshot.
+            </p>
+            {auth.user ? (
+              <button
+                type="button"
+                onClick={createShare}
+                disabled={sharing}
+                className="mt-3 btn-secondary"
+              >
+                {sharing ? "Creating..." : "Create share link"}
+              </button>
+            ) : (
+              <p className="mt-3 text-[11px] leading-5 text-slate-500">
+                Sign in to create a share link.
+              </p>
+            )}
+            {shareUrl && <p className="mt-2 break-all text-xs text-blue-700">{shareUrl}</p>}
+            <div className="mt-4 space-y-2">
+              <h4 className="text-xs font-semibold text-slate-600">Version history</h4>
+              {loadingVersions ? (
+                <p className="text-[11px] text-slate-500">Loading versions...</p>
+              ) : versions.length ? (
+                versions.map((version) => (
+                  <button
+                    key={version.id}
+                    type="button"
+                    onClick={() => {
+                      if (!version.snapshot) return
+                      const restored = { ...version.snapshot, id: project.id, updatedAt: new Date().toISOString() }
+                      updateProject(restored)
+                      notify("success", "Version restored", version.action)
+                    }}
+                    className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-[11px] hover:border-blue-300"
+                  >
+                    {new Date(version.createdAt).toLocaleString()} - {version.action}
+                  </button>
+                ))
+              ) : (
+                <p className="text-[11px] text-slate-500">No versions yet.</p>
+              )}
+            </div>
+            <button type="button" onClick={exportJson} className="mt-4 btn-secondary">
+              Export JSON
+            </button>
+          </div>
         </aside>
       </div>
       <ConfirmationDialog
@@ -2742,9 +2876,13 @@ function Setting({
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>(() =>
-    location.hash ? location.hash.slice(1) as Screen : "landing",
-  )
+  const [screen, setScreen] = useState<Screen>(() => {
+    const hash = location.hash.slice(1)
+    if (hash.startsWith("shared/")) return "shared"
+    return (hash || "landing") as Screen
+  })
+  const [sharedLoading, setSharedLoading] = useState(false)
+  const [sharedProject, setSharedProject] = useState<Project | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(
@@ -2776,6 +2914,10 @@ export default function App() {
         setProjects(next)
         setSelectedId(next[0]?.id ?? "")
         setProjectsLoading(false)
+        syncOfflineProjects().then(() => loadProjects(auth.user?.id ?? null)).then((synced) => {
+          if (!active || !synced.length) return
+          setProjects(synced)
+        }).catch(() => {})
       })
       .catch((error) => {
         if (!active) return
@@ -2799,6 +2941,26 @@ export default function App() {
       ),
     [collapsed],
   )
+  useEffect(() => {
+    if (screen !== "shared") return
+    const token = location.hash.slice("#shared/".length)
+    if (!token) return
+    setSharedLoading(true)
+    loadSharedProject(token)
+      .then((project) => {
+        if (!project) {
+          notify("error", "Shared plan unavailable", "The link is invalid or expired.")
+          return
+        }
+        setSharedProject(project)
+        setProjects([project])
+        setSelectedId(project.id)
+        setScreen("plan")
+        history.replaceState(null, "", "#plan")
+      })
+      .catch(() => notify("error", "Shared plan unavailable", "Could not load this plan."))
+      .finally(() => setSharedLoading(false))
+  }, [screen])
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -2837,6 +2999,45 @@ export default function App() {
           : "plan",
     )
   }
+  const importProjectFromFile = async (file: File) => {
+    try {
+      const text = await file.text()
+      const source = JSON.parse(text) as Partial<Project>
+      const now = new Date().toISOString()
+      const project: Project = {
+        id: crypto.randomUUID(),
+        title: source.title?.trim() || file.name.replace(/\\.json$/i, ""),
+        objective: source.objective?.trim() || "Imported project",
+        context: source.context?.trim() || "",
+        outcome: source.outcome?.trim() || "Review imported plan",
+        targetDate: source.targetDate,
+        budget: source.budget,
+        resources: source.resources,
+        createdAt: source.createdAt || now,
+        updatedAt: now,
+        status:
+          source.status === "Draft" ||
+          source.status === "Analyzing" ||
+          source.status === "Plan ready" ||
+          source.status === "Validated"
+            ? source.status
+            : "Draft",
+        phases: Array.isArray(source.phases) ? source.phases : [],
+        risks: Array.isArray(source.risks) ? source.risks : [],
+        assumptions: Array.isArray(source.assumptions) ? source.assumptions : [],
+        successCriteria: Array.isArray(source.successCriteria) ? source.successCriteria : [],
+        tags: Array.isArray(source.tags) ? source.tags : [],
+      }
+      setProjects((p) => [project, ...p])
+      setSelectedId(project.id)
+      await saveProject(project, auth.user?.id ?? null)
+      openProject(project)
+      notify("success", "Project imported", "The JSON file was imported as a new project.")
+    } catch (error) {
+      notify("error", "Import failed", String(error))
+    }
+  }
+
   const createProject = (form: ProjectFormData) => {
     const plan = cloneDemoPlan()
     const now = new Date().toISOString()
@@ -2850,7 +3051,9 @@ export default function App() {
     }
     setProjects((p) => [project, ...p])
     setSelectedId(project.id)
-    saveProject(project, auth.user?.id ?? null).catch((error) =>
+    saveProject(project, auth.user?.id ?? null).then(() => {
+      if (auth.user) saveProjectVersion(project, "created", auth.user.id)
+    }).catch((error) =>
       notify("error", "Project save failed", String(error)),
     )
     navigate("council")
@@ -2883,7 +3086,9 @@ export default function App() {
   const updateProject = (project: Project) => {
     const updated = { ...project, updatedAt: new Date().toISOString() }
     setProjects((p) => p.map((x) => (x.id === project.id ? updated : x)))
-    saveProject(updated, auth.user?.id ?? null).catch((error) =>
+    saveProject(updated, auth.user?.id ?? null).then(() => {
+      if (auth.user) saveProjectVersion(updated, "updated", auth.user.id)
+    }).catch((error) =>
       notify("error", "Project save failed", String(error)),
     )
   }
@@ -2902,6 +3107,13 @@ export default function App() {
 
   if (screen === "landing")
     return <Landing enter={(s = "overview") => navigate(s)} />
+  if (screen === "shared") {
+    return (
+      <div className="page">
+        {sharedLoading ? "Loading shared plan..." : "Shared plan is unavailable."}
+      </div>
+    )
+  }
   const title =
     screen === "overview"
       ? "Overview"
@@ -2977,6 +3189,7 @@ export default function App() {
               open={openProject}
               remove={setDeleteTarget}
               navigate={navigate}
+              onImport={importProjectFromFile}
             />
           )}
           {screen === "new" && (
