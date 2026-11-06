@@ -66,6 +66,7 @@ import {
   loadProjectVersions,
   queueProjectForSync,
   getActiveShareToken,
+  setActiveShareToken,
   persistSharedProject,
   refreshSharedProject,
 } from "./lib/projectsRepo"
@@ -1736,6 +1737,7 @@ function PlanScreen({
       await createProjectShare(project.id, token, auth.user.id)
       const url = `${window.location.origin}${window.location.pathname}#shared/${token}`
       setShareUrl(url)
+      setActiveShareToken(token)
       await navigator.clipboard.writeText(url).catch(() => {})
       notify("success", "Share link created", url)
     } catch (error) {
