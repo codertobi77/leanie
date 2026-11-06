@@ -54,19 +54,39 @@ function fromRow(row: any): Project {
 
 export async function loadProjects(userId?: string | null): Promise<Project[]> {
   setActiveShareToken(null)
+  const queued = readOfflineQueue().map((item) => item.project)
   if (userId && neonClient) {
-    const { data, error } = await neonClient
-      .from("leanie_projects")
-      .select("*")
-      .order("updated_at", { ascending: false })
-    if (error) throw error
-    return (data ?? []).map(fromRow)
+    try {
+      await syncOfflineProjects()
+    } catch {
+      // keep queue for the next retry
+    }
+    try {
+      const { data, error } = await neonClient
+        .from("leanie_projects")
+        .select("*")
+        .order("updated_at", { ascending: false })
+      if (error) throw error
+      const base = (data ?? []).map(fromRow)
+      const merged = new Map(base.map((p) => [p.id, p]))
+      for (const project of queued) merged.set(project.id, project)
+      return Array.from(merged.values())
+    } catch {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      const base: Project[] = stored ? (JSON.parse(stored) as Project[]) : []
+      const merged = new Map(base.map((p) => [p.id, p]))
+      for (const project of queued) merged.set(project.id, project)
+      return Array.from(merged.values())
+    }
   }
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? (JSON.parse(stored) as Project[]) : []
+    const base: Project[] = stored ? (JSON.parse(stored) as Project[]) : []
+    const merged = new Map(base.map((p) => [p.id, p]))
+    for (const project of queued) merged.set(project.id, project)
+    return Array.from(merged.values())
   } catch {
-    return []
+    return queued
   }
 }
 
