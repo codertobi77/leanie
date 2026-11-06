@@ -4,26 +4,29 @@ export const analysts: Analyst[] = [
   {
     role: "Strategic Analyst",
     model: "Model S-1",
-    description: "Examines strategic coherence, relevance, and alignment.",
+    description:
+      "Frames market fit, customer value, positioning, roadmap boundaries and measurable success.",
     preview:
       "The core objective is well defined. Narrowing the first release to one audience will strengthen strategic focus.",
-    strength: "Strong alignment",
+    strength: "Strong strategic fit",
   },
   {
     role: "Feasibility Analyst",
     model: "Model F-2",
-    description: "Tests technical, operational, and financial feasibility.",
+    description:
+      "Tests stack, hosting, integration, staffing, budget, timeline and operational support.",
     preview:
       "A six-week validation window is achievable if the initial scope remains constrained to the primary workflow.",
-    strength: "Moderate confidence",
+    strength: "Conditional confidence",
   },
   {
     role: "Critical Reviewer",
     model: "Model C-3",
-    description: "Challenges assumptions and exposes blind spots or risks.",
+    description:
+      "Challenges assumptions, evidence quality, security, privacy, failure modes and scope creep.",
     preview:
       "The plan assumes reliable access to early users. A recruitment fallback and explicit success threshold are required.",
-    strength: "3 assumptions flagged",
+    strength: "Assumptions flagged",
   },
 ]
 
