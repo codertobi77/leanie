@@ -155,9 +155,9 @@ export async function syncOfflineProjects() {
   localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(remaining))
 }
 
-export async function createProjectShare(projectId: string, token: string, userId?: string | null) {
+export async function createProjectShare(projectId: string, token: string, userId: string | null, role: string = "editor", expiresAt: string | null = null) {
   if (!userId || !neonClient) return null
-  const toRowShare = { project_id: projectId, token, role: "editor", created_by: userId }
+  const toRowShare = { project_id: projectId, token, role, created_by: userId, expires_at: expiresAt }
   const { data, error } = await neonClient.from("leanie_shares").insert(toRowShare).select().single()
   if (error) return null
   return data as any
@@ -236,6 +236,53 @@ export async function saveProjectVersion(project: Project, action: string, userI
   })
 }
 
+export async function heartbeatSharePresence(
+  token: string,
+  userId: string | null,
+  email: string | null,
+) {
+  if (!neonClient || !token) return
+  try {
+    await neonClient.from("leanie_share_presence").upsert(
+      {
+        share_token: token,
+        user_id: userId || "anonymous",
+        user_email: email,
+        last_seen_at: new Date().toISOString(),
+      },
+      { onConflict: "share_token,user_id" },
+    )
+  } catch {
+    // ignore
+  }
+}
+
+export async function loadSharePresence(token: string): Promise<Array<{ userId: string; email: string | null; lastSeenAt: string }>> {
+  if (!neonClient || !token) return []
+  try {
+    const { data, error } = await neonClient
+      .from("leanie_share_presence")
+      .select("*")
+      .eq("share_token", token)
+      .gte("last_seen_at", new Date(Date.now() - 90_000).toISOString())
+    if (error) return []
+    return (data ?? []).map((row: any) => ({
+      userId: row.user_id,
+      email: row.user_email ?? null,
+      lastSeenAt: row.last_seen_at,
+    }))
+  } catch {
+    return []
+  }
+}
+
+export async function trackResource(
+  _path: string,
+  _metadata?: Record<string, unknown>,
+): Promise<void> {
+  // placeholder for observability hooks (P5)
+  return
+}
 export async function loadProjectVersions(projectId: string) {
   if (!neonClient) return []
   const { data, error } = await neonClient.from("leanie_versions").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(25)

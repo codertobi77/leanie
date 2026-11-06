@@ -103,6 +103,8 @@ import {
   setActiveShareToken,
   persistSharedProject,
   refreshSharedProject,
+  heartbeatSharePresence,
+  loadSharePresence,
 } from "./lib/projectsRepo"
 
 const STORAGE_KEY = "leanie-projects-v1"
@@ -1740,6 +1742,15 @@ function PlanScreen({
   const [replaying, setReplaying] = useState(false)
   const [shareUrl, setShareUrl] = useState("")
   const [sharing, setSharing] = useState(false)
+  const [shareRole, setShareRole] = useState<"editor" | "viewer">("editor")
+  const [shareExpiryDays, setShareExpiryDays] = useState(0)
+  const [invites, setInvites] = useState<any[]>([])
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteRole, setInviteRole] = useState<"editor" | "viewer">
+("editor")
+  const [inviting, setInviting] = useState(false)
+  const [presence, setPresence] = useState<any[]>([])
+  const invitesUrl = import.meta.env.VITE_NEON_FUNCTION_INVITES_BASE_URL as string | undefined
   const [versions, setVersions] = useState<any[]>([])
   const [loadingVersions, setLoadingVersions] = useState(true)
   const auth = useAuth()
@@ -1765,6 +1776,7 @@ function PlanScreen({
       .finally(() => setLoadingVersions(false))
   }, [project.id])
 
+
   const createShare = async () => {
     if (!auth.user) {
       notify("info", "Sign in required", "Sign in to create a share link.")
@@ -1773,18 +1785,92 @@ function PlanScreen({
     setSharing(true)
     try {
       const token = crypto.randomUUID()
-      await createProjectShare(project.id, token, auth.user.id)
+      const expiresAt = shareExpiryDays > 0 ? new Date(Date.now() + shareExpiryDays * 86_400_000).toISOString() : null
+      await createProjectShare(project.id, token, auth.user.id, shareRole, expiresAt)
       const url = `${window.location.origin}${window.location.pathname}#shared/${token}`
       setShareUrl(url)
       setActiveShareToken(token)
       await navigator.clipboard.writeText(url).catch(() => {})
-      notify("success", "Share link created", url)
+      notify("success", "Share link created", `${url}${expiresAt ? ` (expires ${new Date(expiresAt).toLocaleDateString()})` : ""}`)
     } catch (error) {
       notify("error", "Share failed", String(error))
     } finally {
       setSharing(false)
     }
   }
+
+  const loadInvites = async () => {
+    if (!invitesUrl) return
+    try {
+      const payload = await callNeonFunction<{ invites: any[] }>(invitesUrl, {
+        action: "list",
+        projectId: project.id,
+      })
+      setInvites(payload?.invites ?? [])
+    } catch {
+      // ignore
+    }
+  }
+
+  const createInvite = async () => {
+    const invitesUrlLocal = invitesUrl
+    if (!invitesUrlLocal || !auth.user) {
+      notify("info", "Sign in required", "Sign in to invite collaborators.")
+      return
+    }
+    if (!inviteEmail.trim()) return
+    setInviting(true)
+    try {
+      const invite = await callNeonFunction<any>(invitesUrlLocal, {
+        action: "create",
+        projectId: project.id,
+        inviteeEmail: inviteEmail.trim(),
+        inviterId: auth.user.id,
+        role: inviteRole,
+      })
+      await loadInvites()
+      const link = `${window.location.origin}${window.location.pathname}#invite/${invite.token}`
+      try {
+        await navigator.clipboard.writeText(link)
+      } catch {
+        // ignore
+      }
+      notify("success", "Invite created", `Send this link to the invitee: ${link}`)
+      setInviteEmail("")
+    } catch (error) {
+      notify("error", "Invite failed", String(error))
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  const revokeInvite = async (id: string) => {
+    if (!invitesUrl) return
+    try {
+      await callNeonFunction(invitesUrl, { action: "revoke", id })
+      await loadInvites()
+    } catch (error) {
+      notify("error", "Revoke failed", String(error))
+    }
+  }
+
+  // Presence heartbeat + polling while editing a shared project.
+  useEffect(() => {
+    const token = getActiveShareToken() ?? (shareUrl ? shareUrl.split("#shared/")[1] : null)
+    if (!token) return
+    let active = true
+    const run = async () => {
+      await heartbeatSharePresence(token, auth.user?.id ?? null, auth.user?.email ?? null)
+      const list = await loadSharePresence(token)
+      if (active) setPresence(list)
+    }
+    run()
+    const interval = window.setInterval(run, 8000)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [shareUrl, auth.user?.id])
 
   const exportJson = () => {
     const content = JSON.stringify(project, null, 2)
@@ -2034,16 +2120,30 @@ function PlanScreen({
     }
     try {
       const ext = type === "md" ? "md" : "csv"
+      const content =
+        type === "md"
+          ? `# ${project.title}\n\n${project.objective}\n\n${(project.phases ?? [])
+              .map((phase) => `## ${phase.title}\n\n${phase.tasks.map((task) => `- ${task.title}: ${task.description}`).join("\n")}`)
+              .join("\n\n")}`
+          : `phase,task,priority,duration,dependency,deliverable\n${(project.phases ?? [])
+              .flatMap((phase) => phase.tasks.map((task) => `${JSON.stringify(phase.title)},${JSON.stringify(task.title)},${task.priority},${task.duration},${JSON.stringify(task.dependency)},${JSON.stringify(task.deliverable)}`))
+              .join("\n")}`
       const path = `${user.id}/${project.id}-${Date.now()}.${ext}`
+      const uploadResult = await callNeonFunction<{ path: string; url: string }>(baseUrl, {
+        path,
+        content,
+        contentType: type === "md" ? "text/markdown" : "text/csv",
+      })
       const { data: saved, error } = await neonClient.from("leanie_exports").insert({
         user_id: user.id,
         project_id: project.id,
         format: type,
-        storage_path: path,
+        storage_path: uploadResult?.path ?? path,
       }).select().single()
       if (error) throw error
       setExportOpen(false)
-      notify("success", "Export recorded", `Neon object storage planned path: ${saved?.storage_path ?? path}`)
+      await navigator.clipboard.writeText(uploadResult?.url ?? "").catch(() => {})
+      notify("success", "Export stored", `Stored at ${uploadResult?.path ?? path}; URL copied.`)
     } catch (error) {
       notify("error", "Storage export failed", String(error))
     }
@@ -2532,20 +2632,109 @@ function PlanScreen({
               Share the current plan and restore a previous snapshot.
             </p>
             {auth.user ? (
-              <button
-                type="button"
-                onClick={createShare}
-                disabled={sharing}
-                className="mt-3 btn-secondary"
-              >
-                {sharing ? "Creating..." : "Create share link"}
-              </button>
+              <>
+                <div className="mt-3 grid gap-2 sm:grid-cols-[auto_1fr_auto]">
+                  <select
+                    value={shareRole}
+                    onChange={(e) => setShareRole(e.target.value as any)}
+                    className="settings-select"
+                  >
+                    <option value="viewer">Viewer</option>
+                    <option value="editor">Editor</option>
+                  </select>
+                  <select
+                    value={shareExpiryDays}
+                    onChange={(e) => setShareExpiryDays(Number(e.target.value))}
+                    className="settings-select"
+                  >
+                    <option value={0}>No expiry</option>
+                    <option value={1}>1 day</option>
+                    <option value={7}>7 days</option>
+                    <option value={30}>30 days</option>
+                  </select>
+                  <button type="button" onClick={createShare} disabled={sharing} className="btn-secondary">
+                    {sharing ? "Creating..." : "Create share link"}
+                  </button>
+                </div>
+              </>
             ) : (
               <p className="mt-3 text-[11px] leading-5 text-slate-500">
                 Sign in to create a share link.
               </p>
             )}
             {shareUrl && <p className="mt-2 break-all text-xs text-blue-700">{shareUrl}</p>}
+
+            {/* Invites */}
+            {auth.user && (
+              <div className="mt-4 space-y-2">
+                <h4 className="text-xs font-semibold text-slate-600">Invite collaborators</h4>
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                  <input
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="collaborator@email.com"
+                    className="settings-select"
+                  />
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value as any)}
+                    className="settings-select"
+                  >
+                    <option value="viewer">Viewer</option>
+                    <option value="editor">Editor</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={createInvite}
+                    className="btn-secondary"
+                    disabled={inviting || !inviteEmail.trim()}
+                  >
+                    {inviting ? "…" : "Invite"}
+                  </button>
+                </div>
+                {invites.length > 0 && (
+                  <ul className="mt-2 space-y-1.5">
+                    {invites.map((invite) => (
+                      <li
+                        key={invite.id}
+                        className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600"
+                      >
+                        <span className="truncate">
+                          {invite.invitee_email} · {invite.role} · {invite.status}
+                        </span>
+                        {invite.status === "pending" && (
+                          <button
+                            type="button"
+                            onClick={() => revokeInvite(invite.id)}
+                            className="btn-secondary text-xs"
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {/* Presence */}
+            {getActiveShareToken() && (
+              <div className="mt-4 space-y-2">
+                <h4 className="text-xs font-semibold text-slate-600">Collaborators viewing</h4>
+                <ul className="space-y-1">
+                  {presence.length === 0 && (
+                    <li className="text-[11px] text-slate-500">Only you right now.</li>
+                  )}
+                  {presence.map((p) => (
+                    <li key={p.userId} className="text-[11px] text-slate-500">
+                      {p.email || p.userId} · last seen {new Date(p.lastSeenAt).toLocaleTimeString()}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="mt-4 space-y-2">
               <h4 className="text-xs font-semibold text-slate-600">Version history</h4>
               {loadingVersions ? (
@@ -2781,9 +2970,27 @@ function SettingsScreen({
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [authMessage, setAuthMessage] = useState<string | null>(null)
+  const [profileName, setProfileName] = useState("")
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [resetEmail, setResetEmail] = useState("")
+  const [resetToken, setResetToken] = useState("")
+  const [resetNewPassword, setResetNewPassword] = useState("")
+  const [sessions, setSessions] = useState<any[]>([])
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [authBusy, setAuthBusy] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteRole, setInviteRole] = useState<"editor" | "viewer">("editor")
+  useEffect(() => {
+    if (auth.user?.name) setProfileName(auth.user.name)
+  }, [auth.user?.name])
   const signIn = async () => {
     const error = await auth.signIn(email, password)
     setAuthMessage(error ?? "Signed in successfully.")
+    if (!error) {
+      setEmail("")
+      setPassword("")
+    }
   }
   const signUp = async () => {
     const error = await auth.signUp(email, password)
@@ -2842,19 +3049,220 @@ function SettingsScreen({
 
         {tab === "account" && (
           <>
-            <Setting
-              icon={User}
-              title="Account"
-              description="Sign in to save projects and exports in Neon."
-            >
-              {auth.user ? (
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-500">{auth.user.email ?? auth.user.id}</span>
+            {auth.user ? (
+              <>
+                <Setting icon={User} title="Profile" description="Update your display name and email.">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <span className="text-xs text-slate-500">{auth.user.email ?? auth.user.id}</span>
+                    <input
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      placeholder="Display name"
+                      className="settings-select"
+                    />
+                    <button
+                      onClick={async () => {
+                        setAuthBusy(true)
+                        const err = await auth.updateUser(profileName.trim())
+                        setAuthMessage(err ?? "Profile updated.")
+                        setAuthBusy(false)
+                      }}
+                      className="btn-secondary"
+                      disabled={authBusy || !profileName.trim()}
+                    >
+                      Save name
+                    </button>
+                  </div>
+                </Setting>
+
+                <Setting
+                  icon={ShieldAlert}
+                  title="Password"
+                  description="Change your password and revoke other sessions."
+                >
+                  <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Current password"
+                      className="settings-select"
+                    />
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="New password"
+                      className="settings-select"
+                    />
+                    <button
+                      onClick={async () => {
+                        setAuthBusy(true)
+                        const err = await auth.changePassword(currentPassword, newPassword)
+                        setAuthMessage(err ?? "Password changed.")
+                        if (!err) {
+                          setCurrentPassword("")
+                          setNewPassword("")
+                        }
+                        setAuthBusy(false)
+                      }}
+                      className="btn-secondary"
+                      disabled={authBusy || !currentPassword || !newPassword}
+                    >
+                      Change password
+                    </button>
+                  </div>
+                </Setting>
+
+                <Setting
+                  icon={Bot}
+                  title="Password recovery"
+                  description="Request a reset link by email; or paste the token you received."
+                >
+                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <input
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      placeholder="Email to send reset link"
+                      className="settings-select"
+                    />
+                    <button
+                      onClick={async () => {
+                        setAuthBusy(true)
+                        const err = await auth.requestPasswordReset(resetEmail.trim())
+                        setAuthMessage(err ?? "Reset email sent (if the account exists).")
+                        setAuthBusy(false)
+                      }}
+                      className="btn-secondary"
+                      disabled={authBusy || !resetEmail.trim()}
+                    >
+                      Send reset link
+                    </button>
+                  </div>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                    <input
+                      value={resetToken}
+                      onChange={(e) => setResetToken(e.target.value)}
+                      placeholder="Reset token"
+                      className="settings-select"
+                    />
+                    <input
+                      type="password"
+                      value={resetNewPassword}
+                      onChange={(e) => setResetNewPassword(e.target.value)}
+                      placeholder="New password"
+                      className="settings-select"
+                    />
+                    <button
+                      onClick={async () => {
+                        setAuthBusy(true)
+                        const err = await auth.resetPassword(resetToken.trim(), resetNewPassword)
+                        setAuthMessage(err ?? "Password reset.")
+                        if (!err) {
+                          setResetToken("")
+                          setResetNewPassword("")
+                        }
+                        setAuthBusy(false)
+                      }}
+                      className="btn-secondary"
+                      disabled={authBusy || !resetToken.trim() || !resetNewPassword}
+                    >
+                      Reset password
+                    </button>
+                  </div>
+                </Setting>
+
+                <Setting
+                  icon={Sun}
+                  title="Active sessions"
+                  description="Review and revoke sessions on other devices."
+                >
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={async () => {
+                        setSessionsLoading(true)
+                        setSessions(await auth.listSessions())
+                        setSessionsLoading(false)
+                      }}
+                      className="btn-secondary"
+                      disabled={sessionsLoading}
+                    >
+                      {sessionsLoading ? "Loading…" : "Refresh sessions"}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setAuthBusy(true)
+                        const err = await auth.revokeOtherSessions()
+                        setAuthMessage(err ?? "Other sessions revoked.")
+                        setSessions(await auth.listSessions())
+                        setAuthBusy(false)
+                      }}
+                      className="btn-secondary"
+                      disabled={authBusy}
+                    >
+                      Revoke others
+                    </button>
+                  </div>
+                  {sessions.length > 0 && (
+                    <ul className="mt-3 space-y-1.5">
+                      {sessions.map((session, index) => (
+                        <li
+                          key={session.token || index}
+                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                        >
+                          <span className="truncate">
+                            {session.userAgent || "Unknown device"}{" "}
+                            {session.ipAddress ? `· ${session.ipAddress}` : ""}
+                          </span>
+                          <button
+                            onClick={async () => {
+                              const err = await auth.revokeSession(session.token)
+                              if (err) setAuthMessage(err)
+                              else setSessions((list) => list.filter((item) => item.token !== session.token))
+                            }}
+                            className="btn-secondary text-xs"
+                          >
+                            Revoke
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Setting>
+
+                <Setting
+                  icon={Info}
+                  title="Danger zone"
+                  description="Permanently delete your account and projects."
+                >
+                  <button
+                    onClick={async () => {
+                      const ok = window.confirm("Delete your account permanently? This cannot be undone.")
+                      if (!ok) return
+                      setAuthBusy(true)
+                      const err = await auth.deleteAccount()
+                      setAuthMessage(err ?? "Account deleted.")
+                      setAuthBusy(false)
+                    }}
+                    className="btn-secondary text-red-600"
+                    disabled={authBusy}
+                  >
+                    Delete account
+                  </button>
+                </Setting>
+
+                <div className="flex flex-wrap items-center gap-3 pt-2">
                   <button onClick={signOut} className="btn-secondary">
                     Sign out
                   </button>
                 </div>
-              ) : (
+              </>
+            ) : (
+              <Setting
+                icon={User}
+                title="Account"
+                description="Sign in to save projects, shares and exports in Neon."
+              >
                 <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                   <input
                     value={email}
@@ -2878,8 +3286,8 @@ function SettingsScreen({
                     </button>
                   </div>
                 </div>
-              )}
-            </Setting>
+              </Setting>
+            )}
             {authMessage && <p className="text-xs text-slate-500">{authMessage}</p>}
           </>
         )}
@@ -4275,7 +4683,7 @@ function AdminStat({
 export default function App() {
   const [screen, setScreen] = useState<Screen>(() => {
     const hash = location.hash.slice(1)
-    if (hash.startsWith("shared/")) return "shared"
+    if (hash.startsWith("shared/") || hash.startsWith("invite/")) return "shared"
     return (hash || "landing") as Screen
   })
   const [sharedLoading, setSharedLoading] = useState(false)
@@ -4328,6 +4736,33 @@ export default function App() {
     }
   }, [auth.user])
 
+  // Multi-device sync: periodically refresh from Neon when signed-in, and
+  // flush the offline queue. Also refresh on tab focus.
+  useEffect(() => {
+    if (!auth.user?.id) return
+    let active = true
+    const refresh = async () => {
+      try {
+        await syncOfflineProjects()
+        const fresh = await loadProjects(auth.user!.id)
+        if (!active || !fresh.length) return
+        setProjects(fresh)
+      } catch {
+        // ignore
+      }
+    }
+    const interval = window.setInterval(refresh, 30000)
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refresh()
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      active = false
+      clearInterval(interval)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [auth.user?.id])
+
   useEffect(() => {
     localStorage.setItem("leanie-theme", theme)
     document.documentElement.style.colorScheme = theme
@@ -4343,11 +4778,13 @@ export default function App() {
   )
   useEffect(() => {
     if (screen !== "shared") return
-    const token = location.hash.slice("#shared/".length)
+    let raw = location.hash.slice(1)
+    const isInvite = raw.startsWith("invite/")
+    const token = isInvite ? raw.slice("invite/".length) : raw.slice("shared/".length)
     if (!token) return
     setSharedLoading(true)
-    loadSharedProject(token)
-      .then((project) => {
+    const proceed = (shareTok: string) => {
+      loadSharedProject(shareTok).then((project) => {
         if (!project) {
           notify("error", "Shared plan unavailable", "The link is invalid or expired.")
           return
@@ -4355,13 +4792,38 @@ export default function App() {
         setSharedProject(project)
         setProjects([project])
         setSelectedId(project.id)
-        setShareToken(token)
+        setShareToken(shareTok)
         setScreen("plan")
         history.replaceState(null, "", "#plan")
+      }).catch(() => notify("error", "Shared plan unavailable", "Could not load this plan."))
+    }
+    if (isInvite && auth.user?.id) {
+      const invitesUrl = import.meta.env.VITE_NEON_FUNCTION_INVITES_BASE_URL as string | undefined
+      if (!invitesUrl) {
+        setSharedLoading(false)
+        notify("error", "Shared plan unavailable", "Invites not configured.")
+        return
+      }
+      callNeonFunction<any>(invitesUrl, {
+        action: "accept",
+        token,
+        userId: auth.user.id,
+        userEmail: auth.user.email,
       })
-      .catch(() => notify("error", "Shared plan unavailable", "Could not load this plan."))
-      .finally(() => setSharedLoading(false))
-  }, [screen])
+        .then((result) => {
+          proceed(result?.token ?? token)
+        })
+        .catch((error) => notify("error", "Invite accept failed", String(error)))
+        .finally(() => setSharedLoading(false))
+      return
+    }
+    if (isInvite && !auth.user) {
+      setSharedLoading(false)
+      notify("info", "Sign in required", "Sign in to accept this invitation.")
+      return
+    }
+    proceed(token)
+  }, [screen, auth.user?.id])
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -4404,37 +4866,129 @@ export default function App() {
   const importProjectFromFile = async (file: File) => {
     try {
       const text = await file.text()
-      const source = JSON.parse(text) as Partial<Project>
       const now = new Date().toISOString()
-      const project: Project = {
-        id: crypto.randomUUID(),
-        title: source.title?.trim() || file.name.replace(/\\.json$/i, ""),
-        objective: source.objective?.trim() || "Imported project",
-        context: source.context?.trim() || "",
-        outcome: source.outcome?.trim() || "Review imported plan",
-        targetDate: source.targetDate,
-        budget: source.budget,
-        resources: source.resources,
-        createdAt: source.createdAt || now,
-        updatedAt: now,
-        status:
-          source.status === "Draft" ||
-          source.status === "Analyzing" ||
-          source.status === "Plan ready" ||
-          source.status === "Validated"
-            ? source.status
-            : "Draft",
-        phases: Array.isArray(source.phases) ? source.phases : [],
-        risks: Array.isArray(source.risks) ? source.risks : [],
-        assumptions: Array.isArray(source.assumptions) ? source.assumptions : [],
-        successCriteria: Array.isArray(source.successCriteria) ? source.successCriteria : [],
-        tags: Array.isArray(source.tags) ? source.tags : [],
+      let project: Project
+
+      if (file.name.toLowerCase().endsWith(".json")) {
+        const source = JSON.parse(text) as Partial<Project>
+        project = {
+          id: crypto.randomUUID(),
+          title: source.title?.trim() || file.name.replace(/\\.json$/i, ""),
+          objective: source.objective?.trim() || "Imported project",
+          context: source.context?.trim() || "",
+          outcome: source.outcome?.trim() || "Review imported plan",
+          targetDate: source.targetDate,
+          budget: source.budget,
+          resources: source.resources,
+          createdAt: source.createdAt || now,
+          updatedAt: now,
+          status:
+            source.status === "Draft" ||
+            source.status === "Analyzing" ||
+            source.status === "Plan ready" ||
+            source.status === "Validated"
+              ? source.status
+              : "Draft",
+          phases: Array.isArray(source.phases) ? source.phases : [],
+          risks: Array.isArray(source.risks) ? source.risks : [],
+          assumptions: Array.isArray(source.assumptions) ? source.assumptions : [],
+          successCriteria: Array.isArray(source.successCriteria) ? source.successCriteria : [],
+          tags: Array.isArray(source.tags) ? source.tags : [],
+        }
+      } else if (file.name.toLowerCase().endsWith(".csv")) {
+        const rows = text.split(/\\r?\\n/).filter(Boolean)
+        const header = rows[0]?.split(",").map((h) => h.trim().toLowerCase()) ?? []
+        const taskIdx = header.indexOf("task") >= 0 ? header.indexOf("task") : header.indexOf("title")
+        const phaseIdx = header.indexOf("phase")
+        const tasks: Array<{ id: string; title: string; description: string; priority: any; duration: string; dependency: string; resource: string; deliverable: string }> = []
+        for (let i = 1; i < rows.length; i++) {
+          const cols = rows[i].split(",").map((c) => c.trim())
+          const title = taskIdx >= 0 ? cols[taskIdx] : cols[0]
+          if (!title) continue
+          tasks.push({
+            id: crypto.randomUUID(),
+            title,
+            description: (phaseIdx >= 0 ? cols[phaseIdx] : "Imported task") ?? "",
+            priority: "Medium",
+            duration: "1 week",
+            dependency: "None",
+            resource: "Unassigned",
+            deliverable: "Defined output",
+          })
+        }
+        project = {
+          id: crypto.randomUUID(),
+          title: file.name.replace(/\\.csv$/i, ""),
+          objective: "Imported project",
+          context: `Imported ${tasks.length} tasks from CSV.`,
+          outcome: "Review imported plan",
+          createdAt: now,
+          updatedAt: now,
+          status: "Draft",
+          phases: [
+            {
+              id: crypto.randomUUID(),
+              title: "Imported phase",
+              objective: "Tasks imported from CSV",
+              tasks,
+            },
+          ],
+          risks: [],
+          assumptions: [],
+          successCriteria: [],
+          tags: ["imported"],
+        }
+      } else {
+        // Markdown import
+        const lines = text.split(/\\r?\\n/)
+        let title = file.name.replace(/\\.(md|markdown)$/i, "")
+        const sections: string[] = []
+        for (const line of lines) {
+          if (line.startsWith("# ")) title = line.replace(/^#\\s+/, "").trim() || title
+          else if (line.trim()) sections.push(line)
+        }
+        const objective = sections.slice(0, 3).join(" ").slice(0, 400) || "Imported project"
+        project = {
+          id: crypto.randomUUID(),
+          title,
+          objective,
+          context: sections.join("\\n").slice(0, 2000),
+          outcome: "Review imported plan",
+          createdAt: now,
+          updatedAt: now,
+          status: "Draft",
+          phases: [
+            {
+              id: crypto.randomUUID(),
+              title: "Discovery",
+              objective: "Phase extracted from imported markdown",
+              tasks: [
+                {
+                  id: crypto.randomUUID(),
+                  title: "Review imported content",
+                  description: sections.slice(0, 5).join(" ") || "Imported markdown.",
+                  priority: "Medium",
+                  duration: "1 week",
+                  dependency: "None",
+                  resource: "Unassigned",
+                  deliverable: "Validated brief",
+                },
+              ],
+            },
+          ],
+          risks: [],
+          assumptions: [],
+          successCriteria: [],
+          tags: ["imported"],
+        }
       }
+
       setProjects((p) => [project, ...p])
       setSelectedId(project.id)
       await saveProject(project, auth.user?.id ?? null)
+      if (auth.user?.id) saveProjectVersion(project, "imported", auth.user.id)
       openProject(project)
-      notify("success", "Project imported", "The JSON file was imported as a new project.")
+      notify("success", "Project imported", "The file was imported as a new project.")
     } catch (error) {
       notify("error", "Import failed", String(error))
     }
@@ -4492,6 +5046,7 @@ export default function App() {
       setProjects((items) => items.map((x) => (x.id === project.id ? updated : x)))
       persistSharedProject(updated, sharedToken).then((result) => {
         if (result.status === "network" && auth.user?.id) queueProjectForSync(updated, auth.user.id)
+        if (auth.user?.id) saveProjectVersion(updated, "shared-update", auth.user.id)
         if (result.status === "conflict" && result.project) {
           setProjects((items) => items.map((x) => (x.id === project.id ? result.project! : x)))
           notify("error", "Conflict resolved", "Someone else updated the plan first. Your view has been refreshed.")

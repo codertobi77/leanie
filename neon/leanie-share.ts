@@ -4,7 +4,7 @@ export default async function handler(request: Request): Promise<Response> {
   const cors = {
     "content-type": "application/json",
     "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET, OPTIONS, POST",
+    "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
     "access-control-allow-headers": "Content-Type, Authorization",
   };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
@@ -16,8 +16,7 @@ export default async function handler(request: Request): Promise<Response> {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
     try {
       const { rows } = await pool.query(
-        `SELECT p.* FROM public.leanie_projects p JOIN public.leanie_shares s ON s.project_id = p.id WHERE s.token = $1 AND (` +
-          `s.role = 'editor' OR s.role = 'viewer')`,
+        `SELECT p.*, s.role FROM public.leanie_projects p JOIN public.leanie_shares s ON s.project_id = p.id WHERE s.token = $1 AND (s.role = 'editor' OR s.role = 'viewer') AND (s.expires_at IS NULL OR s.expires_at > now())`,
         [token],
       );
       if (!rows.length) return new Response(JSON.stringify({ error: "Not found" }), { status: 404, headers: cors });
@@ -88,6 +87,19 @@ export default async function handler(request: Request): Promise<Response> {
       return new Response(JSON.stringify(updated[0]), { headers: cors });
     } catch (error) {
       await pool.query("ROLLBACK").catch(() => {});
+      return new Response(JSON.stringify({ error: String(error) }), { status: 500, headers: cors });
+    } finally {
+      await pool.end().catch(() => {});
+    }
+  }
+
+  if (request.method === "DELETE") {
+    if (!token) return new Response(JSON.stringify({ error: "token required" }), { status: 400, headers: cors });
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+    try {
+      await pool.query("DELETE FROM public.leanie_shares WHERE token = $1", [token]);
+      return new Response(JSON.stringify({ ok: true }), { headers: cors });
+    } catch (error) {
       return new Response(JSON.stringify({ error: String(error) }), { status: 500, headers: cors });
     } finally {
       await pool.end().catch(() => {});

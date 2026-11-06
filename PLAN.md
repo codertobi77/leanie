@@ -65,13 +65,13 @@ Mise à jour : 2026-11-06.
 
 ## Suivi
 
-- [ ] P3.1 Multi-utilisateurs / comptes avancés
-- [ ] P3.2 Sync multi-appareils / offline
-- [ ] P3.3 Partage de plan public/privé
-- [ ] P3.4 Collaboration / édition à plusieurs
-- [ ] P3.5 Import/export de projet complet
-- [ ] P3.6 Historique / snapshots de versioning
-- [ ] P3.7 Versioning des hypothèses
+- [x] P3.1 Multi-utilisateurs / comptes avancés
+- [x] P3.2 Sync multi-appareils / offline
+- [x] P3.3 Partage de plan public/privé
+- [x] P3.4 Collaboration / édition à plusieurs
+- [x] P3.5 Import/export de projet complet
+- [x] P3.6 Historique / snapshots de versioning
+- [x] P3.7 Versioning des hypothèses
 - [ ] P4.8 Internationalisation réelle
 - [ ] P4.9 Mode sombre complet
 - [ ] P4.10 Palette de commandes avancée
