@@ -3110,7 +3110,7 @@ export default function App() {
     if (sharedToken) {
       setProjects((items) => items.map((x) => (x.id === project.id ? updated : x)))
       persistSharedProject(updated, sharedToken).then((result) => {
-        console.log("shared persist result", result.status, result.project?.title, result.project?.revision, result.error)
+        if (result.status === "network" && auth.user?.id) queueProjectForSync(updated, auth.user.id)
         if (result.status === "conflict" && result.project) {
           setProjects((items) => items.map((x) => (x.id === project.id ? result.project! : x)))
           notify("error", "Conflict resolved", "Someone else updated the plan first. Your view has been refreshed.")

@@ -197,10 +197,12 @@ export async function persistSharedProject(project: Project, token: string) {
       body: JSON.stringify({ token, project, revision: project.revision ?? 1 }),
     })
     const data = await response.json()
+    console.log("persistSharedProject", response.status, data?.title, data?.revision, data?.error)
     if (response.status === 409 && data.current) return { status: "conflict" as const, project: fromRow(data.current) }
     if (!response.ok) return { status: "error" as const, error: data.error }
     return { status: "ok" as const, project: fromRow(data) }
   } catch (error) {
+    console.log("persistSharedProject network error", String(error))
     return { status: "network" as const, error: String(error) }
   }
 }
