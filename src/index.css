@@ -270,6 +270,10 @@
   .palette-empty span { margin-top: .2rem; display: block; font-size: .6rem; }
   .palette-footer { display: flex; gap: 1rem; border-top: 1px solid rgb(255 255 255 / .08); padding: .6rem 1rem; font-size: .52rem; color: #64748b; }
   .palette-footer kbd { margin-right: .15rem; border: 1px solid rgb(255 255 255 / .1); border-radius: .2rem; padding: .08rem .25rem; color: #94a3b8; }
+  .palette-filters { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; border-bottom: 1px solid rgb(255 255 255 / .08); padding: .5rem 1rem; font-size: .62rem; color: #94a3b8; }
+  .palette-filter-chip { display: inline-flex; align-items: center; gap: .25rem; border: 1px solid rgb(100 139 255 / .3); border-radius: 999px; background: rgb(100 139 255 / .1); padding: .15rem .5rem; font-size: .58rem; font-weight: 600; color: #9bb2ff; }
+  .skip-link { position: fixed; top: .5rem; left: .5rem; z-index: 200; transform: translateY(-200%); border-radius: .5rem; background: #101827; padding: .55rem .8rem; font-size: .75rem; font-weight: 600; color: white; transition: transform .15s ease; }
+  .skip-link:focus-visible { transform: translateY(0); }
   .toast-viewport { position: fixed; z-index: 120; right: 1rem; bottom: 1rem; display: flex; width: min(24rem,calc(100vw - 2rem)); flex-direction: column; gap: .55rem; }
   .toast { display: flex; align-items: flex-start; gap: .65rem; border: 1px solid #e2e8f0; border-left-width: 3px; border-radius: .7rem; background: white; padding: .8rem; color: #334155; box-shadow: 0 16px 45px rgb(15 23 42 / .14); animation: toast-in .35s cubic-bezier(.2,.8,.2,1) both; }
   .toast p { font-size: .7rem; font-weight: 600; }
@@ -375,6 +379,36 @@
 .theme-dark .field small { color: #64748b !important; }
 .theme-dark .mini-field { color: #8e9bad !important; }
 .theme-dark .mini-field input, .theme-dark .mini-field textarea, .theme-dark .mini-field select { border-color: rgb(255 255 255 / .12) !important; background-color: #111b2a !important; color: #e5eaf2 !important; }
+
+/* P4.9 — dark-mode completion: dialogs, toasts, filters, scrollbars, focus */
+.theme-dark .modal-overlay, .theme-dark .palette-overlay { background: rgb(5 9 16 / .7) !important; }
+.theme-dark .modal-card { border-color: rgb(255 255 255 / .12) !important; background: #141f30 !important; color: #e5eaf2 !important; }
+.theme-dark .toast { border-color: rgb(255 255 255 / .1) !important; background: #182436 !important; color: #cbd5e1 !important; }
+.theme-dark .toast p { color: #eef2f8 !important; }
+.theme-dark .toast span { color: #8e9bad !important; }
+.theme-dark .palette-filters { border-color: rgb(255 255 255 / .08); }
+.theme-dark .palette-filter-chip { border-color: rgb(100 139 255 / .35); background: rgb(100 139 255 / .14); color: #9bb2ff; }
+.theme-dark ::-webkit-scrollbar { width: 10px; height: 10px; }
+.theme-dark ::-webkit-scrollbar-thumb { border: 2px solid #0d1522; border-radius: 999px; background: #2a3b55; }
+.theme-dark ::-webkit-scrollbar-track { background: transparent; }
+.theme-dark hr { border-color: rgb(255 255 255 / .1) !important; }
+.theme-dark table { color: #cbd5e1 !important; }
+.theme-dark th { color: #8e9bad !important; }
+.theme-dark td, .theme-dark th { border-color: rgb(255 255 255 / .08) !important; }
+.theme-dark kbd { border-color: rgb(255 255 255 / .14) !important; background: #0d1522 !important; color: #cbd5e1 !important; }
+.theme-dark .skip-link { background: #eef2f8 !important; color: #101827 !important; }
+:root[data-theme="dark"] :focus-visible { outline-color: #9bb2ff; }
+:root[data-theme="dark"] select option { background: #141f30; color: #e5eaf2; }
+.theme-dark .council-visual { box-shadow: 0 30px 70px rgb(0 0 0 / .45) !important; }
+.theme-dark .agent-panel { background: #0d1724 !important; }
+
+/* P4.12 — accessibility: visible focus, reduced-motion respect already global */
+:focus-visible { outline-width: 2px; outline-style: solid; }
+.icon-button:focus-visible, .task-checkbox:focus-visible { outline-offset: 2px; }
+@media (prefers-contrast: more) {
+  .btn-secondary, .settings-select, .mini-field input, .mini-field select { border-color: #64748b !important; }
+  .text-slate-400, .text-slate-500 { color: #475569 !important; }
+}
 
 @media (max-width: 1023px) {
   .app-main, .app-main.sidebar-collapsed { padding-left: 0; }

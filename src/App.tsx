@@ -106,6 +106,7 @@ import {
   heartbeatSharePresence,
   loadSharePresence,
 } from "./lib/projectsRepo"
+import { formatDate, formatToday, useLang } from "./lib/i18n"
 
 const STORAGE_KEY = "leanie-projects-v1"
 const blankForm: ProjectFormData = {
@@ -117,23 +118,20 @@ const blankForm: ProjectFormData = {
   budget: "",
   resources: "",
 }
-const navItems: { id: Screen; label: string; icon: typeof Home }[] = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "projects", label: "My Projects", icon: FileText },
-  { id: "new", label: "New Project", icon: Plus },
-  { id: "settings", label: "Settings", icon: Settings },
-  { id: "admin", label: "Admin", icon: BarChart3 },
+const navItems: { id: Screen; label: import("./lib/i18n").DictKey; icon: typeof Home }[] = [
+  { id: "overview", label: "nav.overview", icon: LayoutDashboard },
+  { id: "projects", label: "nav.projects", icon: FileText },
+  { id: "new", label: "nav.new", icon: Plus },
+  { id: "settings", label: "nav.settings", icon: Settings },
+  { id: "admin", label: "nav.admin", icon: BarChart3 },
 ]
 
-function fmtDate(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value))
+function fmtDate(value: string, lang: "en" | "fr" = "en") {
+  return formatDate(value, lang)
 }
 
 function StatusPill({ status }: { status: Project["status"] }) {
+  const { t } = useLang()
   const cls =
     status === "Validated"
       ? "status-green"
@@ -145,7 +143,7 @@ function StatusPill({ status }: { status: Project["status"] }) {
   return (
     <span className={`status ${cls}`}>
       <span className="size-1.5 rounded-full bg-current" />
-      {status}
+      {t(`status.${status}` as import("./lib/i18n").DictKey)}
     </span>
   )
 }
@@ -167,6 +165,7 @@ function AnimatedNumber({ value }: { value: number }) {
 }
 
 function Landing({ enter }: { enter: (screen?: Screen) => void }) {
+  const { t } = useLang()
   return (
     <div className="min-h-screen overflow-hidden bg-[#f8f9fc] text-[#101827]">
       <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#101827]/95 text-white backdrop-blur-xl">
@@ -174,20 +173,20 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
           <Brand light />
           <nav className="hidden items-center gap-8 text-sm text-slate-300 md:flex">
             <a href="#process" className="hover:text-white">
-              How it works
+              {t("landing.howItWorks")}
             </a>
             <a href="#council" className="hover:text-white">
-              AI Council
+              {t("landing.aiCouncil")}
             </a>
             <a href="#benefits" className="hover:text-white">
-              Benefits
+              {t("landing.benefits")}
             </a>
           </nav>
           <button
             onClick={() => enter("overview")}
             className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-[#101827] transition hover:bg-blue-50"
           >
-            Get started
+            {t("landing.getStarted")}
           </button>
         </div>
       </header>
@@ -199,37 +198,35 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
           <div className="relative mx-auto max-w-[1240px] px-5 lg:px-8">
             <div className="mx-auto max-w-4xl text-center">
               <div className="eyebrow mx-auto border-white/10 bg-white/5 text-blue-200">
-                <Sparkles size={13} /> Lean Intelligence Engine
+                <Sparkles size={13} /> {t("landing.eyebrow")}
               </div>
               <h1 className="mt-7 text-[clamp(3.2rem,7vw,6.6rem)] font-medium leading-[0.94] tracking-[-0.065em]">
-                Better thinking.
+                {t("landing.title1")}
                 <br />
-                <span className="text-[#9bb2ff]">Clearer plans.</span>
+                <span className="text-[#9bb2ff]">{t("landing.title2")}</span>
                 <br />
-                Smarter execution.
+                {t("landing.title3")}
               </h1>
               <p className="mx-auto mt-7 max-w-2xl text-lg leading-8 text-slate-300">
-                Turn an idea into a realistic plan through a Council of
-                specialized AI perspectives—challenged, compared, and
-                synthesized for action.
+                {t("landing.subtitle")}
               </p>
               <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
                 <button
                   onClick={() => enter("new")}
                   className="btn-light group"
                 >
-                  Start planning{" "}
+                  {t("landing.startPlanning")}{" "}
                   <ArrowRight
                     size={16}
                     className="transition group-hover:translate-x-0.5"
                   />
                 </button>
                 <a href="#process" className="btn-dark-outline">
-                  Discover how it works <ArrowDown size={15} />
+                  {t("landing.discover")} <ArrowDown size={15} />
                 </a>
               </div>
               <p className="mt-4 text-xs text-slate-500">
-                Interactive prototype · Simulated AI analysis
+                {t("landing.prototypeNote")}
               </p>
             </div>
 
@@ -237,7 +234,7 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
               <div className="rounded-[18px] border border-white/8 bg-[#111c2d] p-5 sm:p-8">
                 <div className="flex items-center justify-between border-b border-white/8 pb-5">
                   <div className="text-left">
-                    <p className="text-xs text-slate-500">COUNCIL SESSION</p>
+                    <p className="text-xs text-slate-500">{t("landing.councilSession")}</p>
                     <p className="mt-1 font-medium">Market entry validation</p>
                   </div>
                   <span className="status border-blue-400/20 bg-blue-400/10 text-blue-200">
@@ -514,12 +511,13 @@ function Sidebar({
   toggleCollapsed: () => void
   openCommand: () => void
 }) {
+  const { t } = useLang()
   return (
     <>
       {mobileOpen && (
         <button
           className="fixed inset-0 z-40 bg-slate-950/35 lg:hidden"
-          aria-label="Close navigation"
+          aria-label={t("nav.openNavigation")}
           onClick={close}
         />
       )}
@@ -535,14 +533,14 @@ function Sidebar({
           <button
             onClick={close}
             className="text-slate-400 lg:hidden"
-            aria-label="Close menu"
+            aria-label={t("nav.closeMenu")}
           >
             <X size={20} />
           </button>
         </div>
         <nav className="flex-1 px-3 py-6">
           <p className="sidebar-label px-3 pb-3 text-[10px] font-semibold tracking-[.18em] text-slate-600">
-            WORKSPACE
+            {t("nav.workspace")}
           </p>
           {navItems.map(({ id, label, icon: Icon }) => (
             <button
@@ -560,10 +558,10 @@ function Sidebar({
               }`}
             >
               <Icon size={17} />
-              <span className="sidebar-label">{label}</span>
+              <span className="sidebar-label">{t(label)}</span>
               {id === "new" && (
                 <span className="sidebar-label ml-auto rounded bg-blue-400/10 px-1.5 py-0.5 text-[10px] text-blue-300">
-                  NEW
+                  {t("nav.newBadge")}
                 </span>
               )}
             </button>
@@ -573,7 +571,7 @@ function Sidebar({
             className="sidebar-item mt-4 border border-white/8"
           >
             <Search size={17} />
-            <span className="sidebar-label">Quick search</span>
+            <span className="sidebar-label">{t("nav.quickSearch")}</span>
             <kbd className="sidebar-label ml-auto rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-slate-500">
               ⌘K
             </kbd>
@@ -585,9 +583,9 @@ function Sidebar({
               LP
             </span>
             <div className="sidebar-label min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">Local prototype</p>
+              <p className="truncate text-sm font-medium">{t("nav.localPrototype")}</p>
               <p className="truncate text-xs text-slate-500">
-                Data stored in this browser
+                {t("nav.localPrototypeDesc")}
               </p>
             </div>
             <MoreHorizontal size={16} className="text-slate-500" />
@@ -595,10 +593,10 @@ function Sidebar({
           <button
             onClick={toggleCollapsed}
             className="sidebar-collapse hidden lg:flex"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? t("nav.expand") : t("nav.collapse")}
           >
             <ChevronRight size={14} className={collapsed ? "" : "rotate-180"} />
-            <span className="sidebar-label">Collapse sidebar</span>
+            <span className="sidebar-label">{t("nav.collapse")}</span>
           </button>
         </div>
       </aside>
@@ -652,22 +650,21 @@ function Dashboard({
     .slice()
     .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
     .slice(0, 4)
+  const { t, lang } = useLang()
   if (loading) return <DashboardSkeleton />
   return (
     <div className="page">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm text-slate-500">Tuesday, March 17</p>
+          <p className="text-sm text-slate-500">{formatToday(lang)}</p>
           <h2 className="mt-2 text-3xl font-semibold tracking-[-.04em] text-slate-950 sm:text-4xl">
-            Good morning.
+            {t("dashboard.greeting")}
           </h2>
-          <p className="mt-3 text-slate-600">
-            Turn your next open question into a defensible plan.
-          </p>
+          <p className="mt-3 text-slate-600">{t("dashboard.tagline")}</p>
         </div>
         <button onClick={() => navigate("new")} className="btn-primary">
           <Plus size={16} />
-          Create a project
+          {t("dashboard.createProject")}
         </button>
       </div>
       <div className="mt-10 grid gap-4 sm:grid-cols-3">
@@ -677,7 +674,7 @@ function Dashboard({
             <span>
               <AnimatedNumber value={projects.length} />
             </span>
-            <p>Total projects</p>
+            <p>{t("dashboard.totalProjects")}</p>
           </div>
         </div>
         <div className="metric-card">
@@ -688,7 +685,7 @@ function Dashboard({
                 value={projects.filter((p) => p.status === "Plan ready").length}
               />
             </span>
-            <p>Plans ready</p>
+            <p>{t("dashboard.plansReady")}</p>
           </div>
         </div>
         <div className="metric-card">
@@ -699,19 +696,19 @@ function Dashboard({
                 value={projects.filter((p) => p.status === "Validated").length}
               />
             </span>
-            <p>Validated</p>
+            <p>{t("dashboard.validated")}</p>
           </div>
         </div>
       </div>
       <div className="mt-10 flex items-center justify-between">
         <div>
-          <h3 className="font-semibold text-slate-950">Recent projects</h3>
+          <h3 className="font-semibold text-slate-950">{t("dashboard.recentProjects")}</h3>
           <p className="mt-1 text-sm text-slate-500">
-            Demonstration content and your locally saved projects.
+            {t("dashboard.recentSub")}
           </p>
         </div>
         <button onClick={() => navigate("projects")} className="text-button">
-          View all <ArrowRight size={14} />
+          {t("dashboard.viewAll")} <ArrowRight size={14} />
         </button>
       </div>
       {recent.length ? (
@@ -900,6 +897,7 @@ function ProjectsScreen({
   const [status, setStatus] = useState("all")
   const [sort, setSort] = useState("updated-desc")
   const [tag, setTag] = useState("")
+  const { t, lang } = useLang()
   const importRef = useRef<HTMLInputElement>(null)
   const filtered = useMemo(() => {
     let next = [...projects]
@@ -930,10 +928,11 @@ function ProjectsScreen({
     <div className="page">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="page-kicker">PROJECT LIBRARY</p>
-          <h2 className="page-title">My projects</h2>
+          <p className="page-kicker">{t("projects.kicker")}</p>
+          <h2 className="page-title">{t("projects.title")}</h2>
           <p className="page-subtitle">
-            Plans and analyses ({projects.length}) · {filtered.length} shown
+            {t("projects.title")} ({projects.length}) · {filtered.length}{" "}
+            {t("projects.shown")}
           </p>
         </div>
         <div className="flex gap-2">
@@ -950,11 +949,11 @@ function ProjectsScreen({
           />
           <button onClick={() => importRef.current?.click()} className="btn-secondary">
             <Download size={16} />
-            Import
+            {t("projects.import")}
           </button>
           <button onClick={() => navigate("new")} className="btn-primary">
             <Plus size={16} />
-            New project
+            {t("projects.newProject")}
           </button>
         </div>
       </div>
@@ -962,20 +961,20 @@ function ProjectsScreen({
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search title, objective or context…"
+          placeholder={t("projects.searchPlaceholder")}
           className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-          aria-label="Search projects"
+          aria-label={t("projects.searchLabel")}
         />
         <select
           value={status}
           onChange={(event) => setStatus(event.target.value)}
           className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-          aria-label="Filter by status"
+          aria-label={t("projects.filterStatus")}
         >
-          <option value="all">All statuses</option>
-          {["Draft", "Analyzing", "Plan ready", "Validated"].map((s) => (
+          <option value="all">{t("projects.allStatuses")}</option>
+          {(["Draft", "Analyzing", "Plan ready", "Validated"] as const).map((s) => (
             <option key={s} value={s}>
-              {s}
+              {t(`status.${s}` as import("./lib/i18n").DictKey)}
             </option>
           ))}
         </select>
@@ -983,19 +982,19 @@ function ProjectsScreen({
           value={sort}
           onChange={(event) => setSort(event.target.value)}
           className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-          aria-label="Sort projects"
+          aria-label={t("projects.sortLabel")}
         >
-          <option value="updated-desc">Newest first</option>
-          <option value="updated-asc">Oldest first</option>
-          <option value="title">Title</option>
-          <option value="status">Status</option>
+          <option value="updated-desc">{t("projects.sortNewest")}</option>
+          <option value="updated-asc">{t("projects.sortOldest")}</option>
+          <option value="title">{t("projects.sortTitle")}</option>
+          <option value="status">{t("projects.sortStatus")}</option>
         </select>
         <input
           value={tag}
           onChange={(event) => setTag(event.target.value)}
-          placeholder="Tag filter"
+          placeholder={t("projects.tagFilter")}
           className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-          aria-label="Filter by tag"
+          aria-label={t("projects.filterTag")}
         />
       </div>
       <div className="mt-9 grid gap-4 lg:grid-cols-2">
@@ -1023,17 +1022,21 @@ function ProjectsScreen({
             </button>
             <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
               <span className="text-xs text-slate-500">
-                Updated {fmtDate(p.updatedAt)}
+                {t("projects.updated")} {fmtDate(p.updatedAt, lang)}
               </span>
               <div className="flex gap-1">
                 <button
                   onClick={() => remove(p)}
                   className="icon-button hover:text-red-600"
-                  aria-label={`Delete ${p.title}`}
+                  aria-label={`${t("common.delete")} ${p.title}`}
                 >
                   <Trash2 size={15} />
                 </button>
-                <button onClick={() => open(p)} className="icon-button">
+                <button
+                  onClick={() => open(p)}
+                  className="icon-button"
+                  aria-label={`${t("common.open")} ${p.title}`}
+                >
                   <ArrowRight size={15} />
                 </button>
               </div>
@@ -1055,7 +1058,8 @@ function ProjectForm({
   const [form, setForm] = useState(blankForm)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [step, setStep] = useState(0)
-  const steps = ["Core idea", "Constraints", "Review"]
+  const { t } = useLang()
+  const steps = [t("form.step1"), t("form.step2"), t("form.step3")]
   const update = (key: keyof ProjectFormData, value: string) => {
     setForm((current) => ({ ...current, [key]: value }))
     setErrors((current) => ({ ...current, [key]: "" }))
@@ -1306,18 +1310,18 @@ function ProjectForm({
             onClick={() => (step ? setStep(step - 1) : cancel())}
             className="btn-secondary"
           >
-            {step ? "Previous" : "Cancel"}
+            {step ? t("form.back") : t("form.cancel")}
           </button>
           <div className="flex items-center gap-4">
             <span className="text-xs text-slate-400">Step {step + 1} of 3</span>
             <button type="submit" className="btn-primary">
               {step === 2 ? (
                 <>
-                  Analyze my project <Sparkles size={16} />
+                  {t("form.createProject")} <Sparkles size={16} />
                 </>
               ) : (
                 <>
-                  Continue <ArrowRight size={16} />
+                  {t("form.next")} <ArrowRight size={16} />
                 </>
               )}
             </button>
@@ -2160,28 +2164,51 @@ function PlanScreen({
 <meta charset="utf-8" />
 <title>${escapeHtml(project.title)}</title>
 <style>
-  @page { margin: 18mm; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; color: #101827; }
-  h1 { font-size: 26px; margin: 0; }
-  h2 { font-size: 18px; margin-top: 24px; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; }
-  p, li { line-height: 1.5; }
-  .meta { color: #475569; font-size: 12px; margin: 8px 0 20px; }
-  .task, .risk { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin: 8px 0; }
-  .task strong, .risk strong { display: block; }
-  .small { color: #475569; font-size: 11px; }
+  @page { margin: 18mm; size: A4; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; color: #101827; font-size: 12px; }
+  h1 { font-size: 30px; margin: 0; letter-spacing: -0.02em; }
+  h2 { font-size: 17px; margin-top: 26px; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 6px; break-after: avoid; }
+  h3 { font-size: 14px; margin: 18px 0 4px; break-after: avoid; }
+  p, li { line-height: 1.55; }
+  ul { padding-left: 18px; }
+  .cover { page-break-after: always; display: flex; flex-direction: column; justify-content: center; min-height: 240mm; }
+  .cover .brand { font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: #526fd2; margin-bottom: 26px; }
+  .cover .meta-grid { margin-top: 34px; border-top: 1px solid #e2e8f0; padding-top: 14px; display: grid; grid-template-columns: 130px 1fr; row-gap: 6px; font-size: 11px; }
+  .cover .meta-grid dt { color: #64748b; font-weight: 600; }
+  .cover .status-pill { display: inline-block; border: 1px solid #c7d2fe; background: #eef2ff; color: #526fd2; border-radius: 999px; padding: 3px 10px; font-size: 10px; font-weight: 600; }
+  .meta { color: #475569; font-size: 11px; margin: 6px 0 18px; }
+  .task, .risk { border: 1px solid #e2e8f0; border-radius: 10px; padding: 11px 13px; margin: 8px 0; break-inside: avoid; page-break-inside: avoid; }
+  .task strong, .risk strong { display: block; font-size: 12.5px; }
+  .small { color: #475569; font-size: 10.5px; margin-top: 4px; }
+  .phase-objective { color: #475569; font-size: 11.5px; margin: 2px 0 10px; }
+  .tag { display: inline-block; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; border-radius: 999px; padding: 2px 9px; font-size: 10px; margin-right: 5px; }
+  footer { margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 10px; color: #94a3b8; font-size: 10px; }
 </style>
 </head>
 <body>
-  <h1>${escapeHtml(project.title)}</h1>
-  <div class="meta">Leanie plan export · Updated ${escapeHtml(fmtDate(project.updatedAt))}</div>
+  <section class="cover">
+    <div class="brand">Leanie · Lean Intelligence Engine</div>
+    <h1>${escapeHtml(project.title)}</h1>
+    <p class="meta">Plan export generated ${escapeHtml(fmtDate(new Date().toISOString()))}</p>
+    <div class="meta-grid">
+      <dt>Status</dt><dd><span class="status-pill">${escapeHtml(project.status)}</span></dd>
+      ${project.targetDate ? `<dt>Target date</dt><dd>${escapeHtml(project.targetDate)}</dd>` : ""}
+      ${project.budget ? `<dt>Budget</dt><dd>${escapeHtml(project.budget)}</dd>` : ""}
+      <dt>Phases / tasks</dt><dd>${project.phases.length} phases · ${project.phases.reduce((sum, phase) => sum + phase.tasks.length, 0)} tasks</dd>
+      ${(project.tags ?? []).length ? `<dt>Tags</dt><dd>${(project.tags ?? []).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</dd>` : ""}
+    </div>
+  </section>
   <h2>Project overview</h2>
   <p>${escapeHtml(project.objective)}</p>
+  ${project.context ? `<h2>Context</h2><p>${escapeHtml(project.context)}</p>` : ""}
+  <h2>Expected outcome</h2>
+  <p>${escapeHtml(project.outcome)}</p>
   <h2>Phases and tasks</h2>
   ${project.phases
     .map(
       (phase) => `
       <h3>${escapeHtml(phase.title)}</h3>
-      <p class="small">${escapeHtml(phase.objective)}</p>
+      <p class="phase-objective">${escapeHtml(phase.objective)}</p>
       ${phase.tasks
         .map(
           (task) => `
@@ -2208,6 +2235,7 @@ function PlanScreen({
   <ul>${(project.successCriteria ?? []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
   <h2>Key assumptions</h2>
   <ul>${(project.assumptions ?? []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+  <footer>Generated by Leanie · ${escapeHtml(fmtDate(new Date().toISOString()))}</footer>
 </body>
 </html>`
     console.log("printPlan opened")
@@ -2531,6 +2559,7 @@ function PlanScreen({
                     onClick={() => removeSuccessCriterion(index)}
                     className="text-red-500"
                     type="button"
+                    aria-label="Remove success criterion"
                   >
                     <Trash2 size={12} />
                   </button>
@@ -2600,7 +2629,12 @@ function PlanScreen({
                       <option>Medium</option>
                       <option>High</option>
                     </select>
-                    <button onClick={() => removeRisk(index)} className="text-red-500" type="button">
+                    <button
+                      onClick={() => removeRisk(index)}
+                      className="text-red-500"
+                      type="button"
+                      aria-label="Remove risk"
+                    >
                       <Trash2 size={12} />
                     </button>
                   </div>
@@ -2879,7 +2913,12 @@ function TaskRow({
           >
             <ArrowDown size={14} />
           </button>
-          <button onClick={() => setOpen(!open)} className="icon-button">
+          <button
+            onClick={() => setOpen(!open)}
+            className="icon-button"
+            aria-label={open ? "Collapse task details" : "Expand task details"}
+            aria-expanded={open}
+          >
             <ChevronDown size={14} className={open ? "rotate-180" : ""} />
           </button>
         </div>
@@ -2951,11 +2990,11 @@ function TaskRow({
 
 type SettingsTab = "appearance" | "account" | "data" | "about"
 
-const settingsTabs: { id: SettingsTab; label: string; icon: typeof Home }[] = [
-  { id: "appearance", label: "Appearance", icon: Sun },
-  { id: "account", label: "Account", icon: User },
-  { id: "data", label: "Data & privacy", icon: ShieldAlert },
-  { id: "about", label: "About", icon: Info },
+const settingsTabs: { id: SettingsTab; label: import("./lib/i18n").DictKey; icon: typeof Home }[] = [
+  { id: "appearance", label: "settings.tabAppearance", icon: Sun },
+  { id: "account", label: "settings.tabAccount", icon: User },
+  { id: "data", label: "settings.tabData", icon: ShieldAlert },
+  { id: "about", label: "settings.tabAbout", icon: Info },
 ]
 
 function SettingsScreen({
@@ -2966,6 +3005,7 @@ function SettingsScreen({
   setTheme: (theme: "light" | "dark") => void
 }) {
   const auth = useAuth()
+  const { t, lang, setLang } = useLang()
   const [tab, setTab] = useState<SettingsTab>("appearance")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -3002,15 +3042,14 @@ function SettingsScreen({
   }
   return (
     <div className="page max-w-4xl">
-      <p className="page-kicker">PREFERENCES</p>
-      <h2 className="page-title">Settings</h2>
+      <p className="page-kicker">{t("settings.kicker")}</p>
+      <h2 className="page-title">{t("settings.title")}</h2>
       <p className="page-subtitle">
-        Keep the experience comfortable and understand how this prototype
-        handles data.
+        {t("settings.subtitle")}
       </p>
 
       <SubTabs
-        tabs={settingsTabs}
+        tabs={settingsTabs.map((tab) => ({ ...tab, label: t(tab.label) }))}
         value={tab}
         onChange={(id) => setTab(id as SettingsTab)}
       />
@@ -3020,28 +3059,36 @@ function SettingsScreen({
           <>
             <Setting
               icon={Sun}
-              title="Interface theme"
-              description="Choose how Leanie appears on this device."
+              title={t("settings.themeTitle")}
+              description={t("settings.themeDesc")}
             >
               <div className="segmented">
-                {(["light", "dark"] as const).map((t) => (
+                {(["light", "dark"] as const).map((themeOption) => (
                   <button
-                    key={t}
-                    onClick={() => setTheme(t)}
-                    className={theme === t ? "selected" : ""}
+                    key={themeOption}
+                    onClick={() => setTheme(themeOption)}
+                    className={theme === themeOption ? "selected" : ""}
                   >
-                    {t === "light" ? "Light" : "Dark"}
+                    {themeOption === "light"
+                      ? t("settings.light")
+                      : t("settings.dark")}
                   </button>
                 ))}
               </div>
             </Setting>
             <Setting
               icon={Languages}
-              title="Language"
-              description="The prototype is currently available in English."
+              title={t("settings.languageTitle")}
+              description={t("settings.languageDesc")}
             >
-              <select className="settings-select">
-                <option>English</option>
+              <select
+                className="settings-select"
+                value={lang}
+                onChange={(event) => setLang(event.target.value as "en" | "fr")}
+                aria-label={t("settings.languageTitle")}
+              >
+                <option value="en">{t("settings.english")}</option>
+                <option value="fr">{t("settings.french")}</option>
               </select>
             </Setting>
           </>
@@ -4681,6 +4728,7 @@ function AdminStat({
 }
 
 export default function App() {
+  const { t } = useLang()
   const [screen, setScreen] = useState<Screen>(() => {
     const hash = location.hash.slice(1)
     if (hash.startsWith("shared/") || hash.startsWith("invite/")) return "shared"
@@ -5091,27 +5139,30 @@ export default function App() {
     return (
       <div className={`theme-${theme}`}>
         <div className="page">
-          {sharedLoading ? "Loading shared plan..." : "Shared plan is unavailable."}
+          {sharedLoading ? t("shared.loading") : t("shared.unavailable")}
         </div>
       </div>
     )
   }
   const title =
     screen === "overview"
-      ? "Overview"
+      ? t("nav.overview")
       : screen === "projects"
-        ? "My Projects"
+        ? t("nav.projects")
         : screen === "new"
-          ? "New Project"
+          ? t("nav.new")
           : screen === "settings"
-            ? "Settings"
+            ? t("nav.settings")
             : screen === "admin"
-              ? "Admin"
+              ? t("nav.admin")
               : (selected?.title ?? "Project")
   return (
     <div
       className={`app-shell min-h-screen bg-[#f8f9fc] text-[#101827] theme-${theme}`}
     >
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
       <Sidebar
         screen={screen}
         navigate={navigate}
@@ -5121,7 +5172,7 @@ export default function App() {
         toggleCollapsed={() => setCollapsed((value) => !value)}
         openCommand={() => setCommandOpen(true)}
       />
-      <main className={`app-main ${collapsed ? "sidebar-collapsed" : ""}`}>
+      <main id="main-content" className={`app-main ${collapsed ? "sidebar-collapsed" : ""}`}>
         <AppHeader
           title={title}
           menu={() => setMobileOpen(true)}
@@ -5143,9 +5194,9 @@ export default function App() {
                   setTheme((value) => (value === "dark" ? "light" : "dark"))
                 }
                 className="icon-button"
-                aria-label={`Switch to ${
-                  theme === "dark" ? "light" : "dark"
-                } theme`}
+                aria-label={
+                  theme === "dark" ? t("settings.switchToLight") : t("settings.switchToDark")
+                }
               >
                 {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
               </button>
@@ -5154,7 +5205,7 @@ export default function App() {
                 className="hidden items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-900 xl:flex"
               >
                 <Home size={14} />
-                Product site
+                {t("nav.productSite")}
               </button>
             </div>
           }
@@ -5220,6 +5271,8 @@ export default function App() {
         onClose={() => setCommandOpen(false)}
         navigate={navigate}
         openProject={openProject}
+        theme={theme}
+        toggleTheme={() => setTheme((value) => (value === "dark" ? "light" : "dark"))}
       />
       <ToastViewport
         items={toasts}

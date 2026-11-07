@@ -72,13 +72,13 @@ Mise à jour : 2026-11-06.
 - [x] P3.5 Import/export de projet complet
 - [x] P3.6 Historique / snapshots de versioning
 - [x] P3.7 Versioning des hypothèses
-- [ ] P4.8 Internationalisation réelle
-- [ ] P4.9 Mode sombre complet
-- [ ] P4.10 Palette de commandes avancée
-- [ ] P4.11 Paramètres de langue actifs
-- [ ] P4.12 Accessibilité (audit clavier/ARIA/contraste)
-- [ ] P4.13 Performance / split bundle
-- [ ] P4.14 Export PDF robuste
+- [x] P4.8 Internationalisation réelle
+- [x] P4.9 Mode sombre complet
+- [x] P4.10 Palette de commandes avancée
+- [x] P4.11 Paramètres de langue actifs
+- [x] P4.12 Accessibilité (audit clavier/ARIA/contraste)
+- [x] P4.13 Performance / split bundle
+- [x] P4.14 Export PDF robuste
 - [ ] P5.15 Méta-modèle provider optionnel
 - [ ] P5.16 Tests unitaires et d'intégration
 - [ ] P5.17 Tests E2E Playwright

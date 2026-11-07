@@ -18,6 +18,29 @@ export default defineConfig(({ mode }) => {
     build: {
       sourcemap: emitSourcemaps ? "inline" : false,
       minify: !emitSourcemaps,
+      // P4.13 — split the bundle: vendor frameworks live in cacheable
+      // chunks so the app entry stays small and deploys don't re-download
+      // unchanged libraries.
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: "react-vendor",
+                test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+              },
+              {
+                name: "icons",
+                test: /node_modules[\\/]lucide-react[\\/]/,
+              },
+              {
+                name: "neon-client",
+                test: /node_modules[\\/]@neondatabase[\\/]/,
+              },
+            ],
+          },
+        },
+      },
     },
     plugins: [
       react(),
