@@ -1243,12 +1243,19 @@ export function translate(
   return text
 }
 
-export function formatDate(value: string, lang: Lang): string {
-  return new Intl.DateTimeFormat(lang === "fr" ? "fr" : "en", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value))
+export function formatDate(value: string | undefined | null, lang: Lang): string {
+  if (!value) return "—"
+  try {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return "—"
+    return new Intl.DateTimeFormat(lang === "fr" ? "fr" : "en", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }).format(date)
+  } catch {
+    return "—"
+  }
 }
 
 export function formatToday(lang: Lang): string {
