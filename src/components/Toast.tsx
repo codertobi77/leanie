@@ -1,4 +1,5 @@
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, X } from "lucide-react"
+import { useLang } from "../lib/i18n"
 
 export type ToastKind = "success" | "error" | "warning" | "info"
 export interface ToastItem {
@@ -22,11 +23,12 @@ export function ToastViewport({
   items: ToastItem[]
   dismiss: (id: string) => void
 }) {
+  const { t } = useLang()
   return (
     <div
       className="toast-viewport"
       aria-live="polite"
-      aria-label="Notifications"
+      aria-label={t("a11y.notificationsRegion")}
     >
       {items.map((toast) => {
         const Icon = icons[toast.kind]
@@ -43,7 +45,7 @@ export function ToastViewport({
             </div>
             <button
               onClick={() => dismiss(toast.id)}
-              aria-label="Dismiss notification"
+              aria-label={t("a11y.dismissNotification")}
             >
               <X size={14} />
             </button>

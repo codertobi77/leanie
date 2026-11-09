@@ -184,7 +184,7 @@ export function CommandPalette({
         className="command-palette"
         role="dialog"
         aria-modal="true"
-        aria-label="Command palette"
+        aria-label={t("a11y.commandPalette")}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="palette-search">

@@ -109,6 +109,7 @@ import {
   loadSharePresence,
 } from "./lib/projectsRepo"
 import { parseCsvRows } from "./lib/csv"
+import { createId } from "./lib/id"
 import {
   formatDate,
   formatToday,
@@ -772,7 +773,7 @@ function AppHeader({
         <button
           className="icon-button"
           onClick={openCommand}
-          aria-label="Open command palette"
+          aria-label={t("a11y.openCommandPalette")}
         >
           <Search size={15} />
         </button>
@@ -1174,8 +1175,9 @@ function Dashboard({
 }
 
 function DashboardSkeleton() {
+  const { t } = useLang()
   return (
-    <div className="page" aria-label="Loading dashboard">
+    <div className="page" aria-label={t("a11y.loadingDashboard")}>
       <div className="skeleton h-4 w-28" />
       <div className="skeleton mt-4 h-10 w-64" />
       <div className="skeleton mt-3 h-4 w-96 max-w-full" />
@@ -1294,8 +1296,9 @@ function ProjectsScreen({
           <input
             ref={importRef}
             type="file"
-            accept="application/json"
+            accept=".json,.csv,.md,.markdown,text/csv,text/markdown,application/json"
             hidden
+            aria-label={t("projects.import")}
             onChange={(event) => {
               const file = event.target.files?.[0]
               if (file) onImport(file)
@@ -1413,7 +1416,7 @@ function ProjectsScreen({
               </div>
             ))}
             {!filtered.length && (
-              <p className="page-subtitle">{t("dashboard.queueEmpty")}</p>
+              <p className="page-subtitle">{t("projects.noMatches")}</p>
             )}
           </div>
         </div>
@@ -1443,13 +1446,12 @@ function ProjectForm({
   const validateStep = () => {
     const next: Record<string, string> = {}
     if (step === 0) {
-      if (!form.title.trim()) next.title = "Add a short project title."
+      if (!form.title.trim()) next.title = t("form.errTitle")
       if (form.objective.trim().length < 20)
-        next.objective = "Describe the objective in at least 20 characters."
+        next.objective = t("form.errObjective")
       if (form.context.trim().length < 20)
-        next.context = "Add enough context for the Council to reason from."
-      if (!form.outcome.trim())
-        next.outcome = "Describe what a useful outcome would look like."
+        next.context = t("form.errContext")
+      if (!form.outcome.trim()) next.outcome = t("form.errOutcome")
     }
     setErrors(next)
     return !Object.keys(next).length
@@ -1507,16 +1509,15 @@ function ProjectForm({
     <div className="page max-w-4xl page-enter">
       <button onClick={cancel} className="back-button">
         <ArrowLeft size={15} />
-        Back to overview
+        {t("form.backToOverview")}
       </button>
       <div className="mt-7">
-        <p className="page-kicker">NEW COUNCIL SESSION</p>
+        <p className="page-kicker">{t("form.kicker")}</p>
         <h2 className="page-title max-w-2xl">
-          Give the Council the context it needs.
+          {t("form.heading")}
         </h2>
         <p className="page-subtitle max-w-2xl">
-          A short guided brief turns uncertainty into structured evidence for
-          the Council.
+          {t("form.subheading")}
         </p>
       </div>
       <div className="form-progress mt-8">
@@ -1689,7 +1690,7 @@ function ProjectForm({
             {step ? t("form.back") : t("form.cancel")}
           </button>
           <div className="flex items-center gap-4">
-            <span className="text-xs text-slate-400">Step {step + 1} of 3</span>
+            <span className="text-xs text-slate-400">{t("form.stepOf", { n: step + 1 })}</span>
             <button type="submit" className="btn-primary">
               {step === 2 ? (
                 <>
@@ -1892,107 +1893,64 @@ function Results({ project, plan }: { project: Project; plan: () => void }) {
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold tracking-widest text-emerald-700">
             <CheckCircle2 size={14} />
-            COUNCIL COMPLETE
+            {t("results.kicker")}
           </div>
           <h2 className="page-title mt-3">{project.title}</h2>
-          <p className="page-subtitle">
-            A structured comparison of the Council’s findings and the Arbiter’s
-            decision.
-          </p>
+          <p className="page-subtitle">{t("results.subtitle")}</p>
         </div>
         <button onClick={plan} className="btn-primary">
-          Open project plan <ArrowRight size={16} />
+          {t("results.openPlan")} <ArrowRight size={16} />
         </button>
       </div>
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        <InfoCard
-          label="PROVIDED BY YOU"
-          tone="blue"
-          text={project.objective}
-        />
-        <InfoCard
-          label="AI ASSUMPTION"
-          tone="amber"
-          text="Early users can be recruited within two weeks through accessible channels."
-        />
-        <InfoCard
-          label="COUNCIL RECOMMENDATION"
-          tone="green"
-          text="Proceed with a time-boxed validation phase before funding a full build."
-        />
+        <InfoCard label={t("results.providedByYou")} tone="blue" text={project.objective} />
+        <InfoCard label={t("results.aiAssumption")} tone="amber" text={t("results.assumptionDemo")} />
+        <InfoCard label={t("results.councilRecommendation")} tone="green" text={t("results.recommendationDemo")} />
       </div>
-      <ReportSection icon={FileText} title="Executive summary">
-        <p>
-          The concept is strategically coherent and suitable for a focused
-          validation cycle. The Council recommends proceeding conditionally:
-          constrain the first release, verify access to target users, and define
-          measurable evidence thresholds before delivery begins.
-        </p>
+      <ReportSection icon={FileText} title={t("results.executiveSummary")}>
+        <p>{t("results.execBody")}</p>
       </ReportSection>
       <div className="grid gap-4 lg:grid-cols-3">
-        <Assessment
-          title="Strategic assessment"
-          rating="Strong"
-          body="The objective supports a clear decision and avoids premature commitment. The intended outcome is specific enough to guide discovery."
-        />
-        <Assessment
-          title="Feasibility assessment"
-          rating="Conditional"
-          body="The proposed direction is viable within the stated constraints if the initial workflow remains tightly scoped."
-        />
-        <Assessment
-          title="Critical review"
-          rating="3 flags"
-          body="User access, evidence quality, and uncontrolled scope are the assumptions most likely to undermine the result."
-        />
+        <Assessment title={t("results.strategic")} rating={t("results.ratingStrong")} body={t("results.strategicBody")} />
+        <Assessment title={t("results.feasibility")} rating={t("results.ratingConditional")} body={t("results.feasibilityBody")} />
+        <Assessment title={t("results.criticalReview")} rating={t("results.ratingFlags3")} body={t("results.criticalBody")} />
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <ReportSection icon={CheckCircle2} title="Points of agreement" compact>
+        <ReportSection icon={CheckCircle2} title={t("results.agreements")} compact>
           <ul className="report-list">
-            <li>Validate demand before committing to implementation.</li>
-            <li>Focus on one audience and one critical workflow.</li>
-            <li>Define decision thresholds before collecting evidence.</li>
+            <li>{t("results.agreement1")}</li>
+            <li>{t("results.agreement2")}</li>
+            <li>{t("results.agreement3")}</li>
           </ul>
         </ReportSection>
-        <ReportSection
-          icon={Zap}
-          title="Disagreements and trade-offs"
-          compact
-          accent
-        >
+        <ReportSection icon={Zap} title={t("results.disagreements")} compact accent>
           <div className="space-y-4">
             <div>
-              <span className="argument-label">STRATEGY</span>
-              <p>
-                Favored a broader proposition to preserve long-term opportunity.
-              </p>
+              <span className="argument-label">{t("results.strategyLabel")}</span>
+              <p>{t("results.strategyBody")}</p>
             </div>
             <div>
-              <span className="argument-label">FEASIBILITY + CRITIQUE</span>
-              <p>
-                Argued that breadth creates untestable scope and weakens
-                evidence.
-              </p>
+              <span className="argument-label">{t("results.feasCritLabel")}</span>
+              <p>{t("results.feasCritBody")}</p>
             </div>
             <div className="resolution">
               <Scale size={15} />
               <p>
-                <strong>Arbiter resolution:</strong> preserve the broader vision
-                as context, but test only the narrow critical path.
+                <strong>{t("results.arbiterResolutionLabel")}</strong> {t("results.arbiterResolutionBody")}
               </p>
             </div>
           </div>
         </ReportSection>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <ReportSection icon={Lightbulb} title="Key assumptions" compact>
+        <ReportSection icon={Lightbulb} title={t("results.assumptions")} compact>
           <ul className="report-list numbered">
             {(project.assumptions ?? []).map((assumption) => (
               <li key={assumption}>{assumption}</li>
             ))}
           </ul>
         </ReportSection>
-        <ReportSection icon={ShieldAlert} title="Identified risks" compact>
+        <ReportSection icon={ShieldAlert} title={t("results.risks")} compact>
           <div className="space-y-3">
             {project.risks.map((r) => (
               <div
@@ -2000,7 +1958,9 @@ function Results({ project, plan }: { project: Project; plan: () => void }) {
                 className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm"
               >
                 <span>{r.title}</span>
-                <span className="status status-amber">{r.likelihood}</span>
+                <span className="status status-amber">
+                  {t(`likelihood.${r.likelihood}` as any) || r.likelihood}
+                </span>
               </div>
             ))}
             {!project.risks.length && (
@@ -2018,21 +1978,14 @@ function Results({ project, plan }: { project: Project; plan: () => void }) {
           </span>
           <div>
             <p className="text-xs font-semibold tracking-widest text-violet-300">
-              FINAL ARBITER RECOMMENDATION
+              {t("results.finalRecommendation")}
             </p>
-            <h3 className="mt-1 text-xl font-medium">
-              Proceed—through a gated validation plan.
-            </h3>
+            <h3 className="mt-1 text-xl font-medium">{t("results.proceedGated")}</h3>
           </div>
         </div>
-        <p className="mt-5 max-w-3xl text-sm leading-7 text-slate-300">
-          The opportunity warrants further investment, but current evidence does
-          not support a full build. Complete the three proposed phases, review
-          the stated success criteria, then make a deliberate proceed, revise,
-          or stop decision.
-        </p>
+        <p className="mt-5 max-w-3xl text-sm leading-7 text-slate-300">{t("results.finalBody")}</p>
         <button onClick={plan} className="btn-light mt-6">
-          Review actionable plan <ArrowRight size={16} />
+          {t("results.reviewPlan")} <ArrowRight size={16} />
         </button>
       </div>
     </div>
@@ -2127,6 +2080,7 @@ function PlanScreen({
   shareToken?: string | null
   onShareTokenCreated?: (token: string) => void
 }) {
+  const { t, lang } = useLang()
   const [expanded, setExpanded] = useState<string[]>(
     project.phases.map((p) => p.id),
   )
@@ -2186,21 +2140,21 @@ function PlanScreen({
 
   const createShare = async () => {
     if (!auth.user) {
-      notify("info", "Sign in required", "Sign in to create a share link.")
+      notify("info", t("toast.signInRequired"), t("toast.signInToShare"))
       return
     }
     setSharing(true)
     try {
-      const token = crypto.randomUUID()
+      const token = createId()
       const expiresAt = shareExpiryDays > 0 ? new Date(Date.now() + shareExpiryDays * 86_400_000).toISOString() : null
       await createProjectShare(project.id, token, auth.user.id, shareRole, expiresAt)
       const url = `${window.location.origin}${window.location.pathname}#shared/${token}`
       setShareUrl(url)
       setActiveShareToken(token)
       await navigator.clipboard.writeText(url).catch(() => {})
-      notify("success", "Share link created", `${url}${expiresAt ? ` (expires ${new Date(expiresAt).toLocaleDateString()})` : ""}`)
+      notify("success", t("toast.shareCreated"), `${url}${expiresAt ? ` (${expiresAt})` : ""}`)
     } catch (error) {
-      notify("error", "Share failed", String(error))
+      notify("error", t("toast.shareFailed"), String(error))
     } finally {
       setSharing(false)
     }
@@ -2222,7 +2176,7 @@ function PlanScreen({
   const createInvite = async () => {
     const invitesUrlLocal = invitesUrl
     if (!invitesUrlLocal || !auth.user) {
-      notify("info", "Sign in required", "Sign in to invite collaborators.")
+      notify("info", t("toast.signInRequired"), t("toast.signInToInvite"))
       return
     }
     if (!inviteEmail.trim()) return
@@ -2242,10 +2196,10 @@ function PlanScreen({
       } catch {
         // ignore
       }
-      notify("success", "Invite created", `Send this link to the invitee: ${link}`)
+      notify("success", t("toast.inviteCreated"), link)
       setInviteEmail("")
     } catch (error) {
-      notify("error", "Invite failed", String(error))
+      notify("error", t("toast.inviteFailed"), String(error))
     } finally {
       setInviting(false)
     }
@@ -2257,7 +2211,7 @@ function PlanScreen({
       await callNeonFunction(invitesUrl, { action: "revoke", id })
       await loadInvites()
     } catch (error) {
-      notify("error", "Revoke failed", String(error))
+      notify("error", t("toast.revokeFailed"), String(error))
     }
   }
 
@@ -2348,7 +2302,7 @@ function PlanScreen({
       tasks: [
         ...p.tasks,
         {
-          id: crypto.randomUUID(),
+          id: createId(),
           title: "New task",
           description: "Describe the intended work.",
           priority: "Medium",
@@ -2455,7 +2409,7 @@ function PlanScreen({
   const replayIsolatedStep = async () => {
     const baseUrl = import.meta.env.VITE_NEON_FUNCTION_COUNCIL_BASE_URL as string | undefined
     if (!baseUrl || !neonClient) {
-      notify("error", "Neon unavailable", "Configure the Neon Auth and Function URLs first.")
+      notify("error", t("toast.neonUnavailable"), t("toast.configNeonFirst"))
       return
     }
     setReplaying(true)
@@ -2466,6 +2420,7 @@ function PlanScreen({
         method: "POST",
         headers: {
           "Content-Type": "text/plain;charset=UTF-8",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           step: replayStep,
@@ -2522,7 +2477,7 @@ function PlanScreen({
     const { data: sessionData } = await neonClient.auth.getSession()
     const user = (sessionData as any)?.session?.user
     if (!user) {
-      notify("info", "Sign in required", "Sign in to store exports in Neon.")
+      notify("info", t("toast.signInRequired"), t("toast.signInToStore"))
       return
     }
     try {
@@ -2736,22 +2691,20 @@ function PlanScreen({
           <div className="flex items-center gap-3">
             <StatusPill status={project.status} />
             <span className="text-xs text-slate-400">
-              Updated {fmtDate(project.updatedAt)}
+              {t("common.updated")} {fmtDate(project.updatedAt, lang)}
             </span>
           </div>
           <textarea
             className="title-input mt-3"
             value={project.title}
             onChange={(e) => patch({ title: e.target.value })}
-            aria-label="Project title"
+            aria-label={t("plan.projectTitleAria")}
             rows={1}
           />
-          <p className="mt-2 text-sm text-slate-500">
-            Editable Council-generated plan · changes save locally
-          </p>
+          <p className="mt-2 text-sm text-slate-500">{t("plan.editableNote")}</p>
           <div className="plan-progress mt-4">
             <div>
-              <span>Project progress</span>
+              <span>{t("plan.projectProgress")}</span>
               <strong>{progress}%</strong>
             </div>
             <div className="progress-track">
@@ -2766,7 +2719,7 @@ function PlanScreen({
               className="btn-secondary"
             >
               <Download size={15} />
-              Export <ChevronDown size={14} />
+              {t("plan.export")} <ChevronDown size={14} />
             </button>
             {exportOpen && (
               <div className="export-menu">
@@ -2774,13 +2727,13 @@ function PlanScreen({
                   Markdown <span>.md</span>
                 </button>
                 <button onClick={() => exportFile("csv")}>
-                  Task data <span>.csv</span>
+                  {t("plan.taskData")} <span>.csv</span>
                 </button>
                 <button onClick={() => exportToNeon("md")}>
-                  Cloud copy <span>.md</span>
+                  {t("plan.cloudCopy")} <span>.md</span>
                 </button>
                 <button onClick={printPlan}>
-                  PDF report <span>.pdf</span>
+                  {t("plan.pdfReport")} <span>.pdf</span>
                 </button>
               </div>
             )}
@@ -2791,33 +2744,31 @@ function PlanScreen({
             disabled={project.status === "Validated"}
           >
             <CheckCircle2 size={16} />
-            {project.status === "Validated"
-              ? "Plan validated"
-              : "Validate plan"}
+            {project.status === "Validated" ? t("plan.planValidated") : t("plan.validatePlan")}
           </button>
         </div>
       </div>
       <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_280px]">
         <div>
           <section className="rounded-2xl border border-slate-200 bg-white p-6">
-            <p className="block-label">PROJECT OVERVIEW</p>
+            <p className="block-label">{t("plan.projectOverview")}</p>
             <textarea
               className="editable-overview"
               value={project.objective}
               onChange={(e) => patch({ objective: e.target.value })}
-              aria-label="Project objective"
+              aria-label={t("plan.objectiveAria")}
             />
             <div className="mt-5 flex flex-wrap gap-5 text-xs text-slate-500">
               <span className="flex items-center gap-1.5">
                 <CalendarDays size={14} />
-                {project.targetDate
-                  ? fmtDate(project.targetDate)
-                  : "No fixed deadline"}
+                {project.targetDate ? fmtDate(project.targetDate, lang) : t("plan.noFixedDeadline")}
               </span>
               <span className="flex items-center gap-1.5">
                 <ListChecks size={14} />
-                {project.phases.length} phases ·{" "}
-                {project.phases.reduce((n, p) => n + p.tasks.length, 0)} tasks
+                {t("plan.phasesTasks", {
+                  phases: project.phases.length,
+                  tasks: project.phases.reduce((n, p) => n + p.tasks.length, 0),
+                })}
               </span>
             </div>
           </section>
@@ -2914,7 +2865,7 @@ function PlanScreen({
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 py-3 text-xs font-medium text-slate-500 hover:border-blue-300 hover:text-blue-700"
                     >
                       <Plus size={14} />
-                      Add task
+                      {t("plan.addTask")}
                     </button>
                   </div>
                 )}
@@ -2926,7 +2877,7 @@ function PlanScreen({
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
             <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
               <Lightbulb size={16} />
-              Assumption check
+              {t("plan.assumptionCheck")}
             </div>
             <p className="mt-3 text-xs leading-5 text-amber-800">
               Review Council assumptions before validation. Validation remains a
@@ -2943,7 +2894,7 @@ function PlanScreen({
                  }}
                  className="mt-4 text-xs font-semibold text-amber-900 underline underline-offset-4"
                >
-                 Re-run Council analysis
+                 {t("plan.rerunCouncil")}
                </button>
              )}
           </div>
@@ -2964,7 +2915,7 @@ function PlanScreen({
                     onClick={() => removeSuccessCriterion(index)}
                     className="mt-0.5 shrink-0 text-red-500"
                     type="button"
-                    aria-label="Remove success criterion"
+                    aria-label={t("plan.removeCriterionAria")}
                   >
                     <Trash2 size={12} />
                   </button>
@@ -2984,7 +2935,7 @@ function PlanScreen({
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h3 className="text-sm font-semibold">Isolated Council step</h3>
+            <h3 className="text-sm font-semibold">{t("plan.isolatedStep")}</h3>
             <p className="mt-2 text-[11px] leading-5 text-slate-500">
               Re-run only one Council step and patch the completed plan.
             </p>
@@ -3007,12 +2958,12 @@ function PlanScreen({
                 disabled={replaying}
                 className="btn-secondary whitespace-normal"
               >
-                {replaying ? "Running..." : "Replay selected step"}
+                {replaying ? t("common.running") : t("plan.replayStep")}
               </button>
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h3 className="text-sm font-semibold">Risks & mitigation</h3>
+            <h3 className="text-sm font-semibold">{t("plan.risksMitigation")}</h3>
             <div className="mt-4 space-y-4">
               {project.risks.map((risk, index) => (
                 <div key={`${risk.title}-${index}`} className="space-y-1">
@@ -3067,7 +3018,7 @@ function PlanScreen({
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h3 className="text-sm font-semibold">Sharing & versions</h3>
+            <h3 className="text-sm font-semibold">{t("plan.sharingVersions")}</h3>
             <p className="mt-2 text-[11px] leading-5 text-slate-500">
               Share the current plan and restore a previous snapshot.
             </p>
@@ -3207,18 +3158,14 @@ function PlanScreen({
       </div>
       <ConfirmationDialog
         open={confirmValidation}
-        title="Validate this project plan?"
-        description="Validation confirms that you have reviewed the Council’s assumptions, risks, tasks, and success criteria. You can continue editing afterward."
-        confirmLabel="Validate plan"
+        title={t("dialog.validateTitle")}
+        description={t("dialog.validateDesc")}
+        confirmLabel={t("plan.validatePlan")}
         onClose={() => setConfirmValidation(false)}
         onConfirm={() => {
           patch({ status: "Validated" })
           setConfirmValidation(false)
-          notify(
-            "success",
-            "Plan validated",
-            "Your review decision has been saved locally.",
-          )
+          notify("success", t("toast.planValidated"), t("toast.planValidatedMsg"))
         }}
       />
     </div>
@@ -3254,7 +3201,9 @@ function TaskRow({
   onDragEnd?: () => void
   className?: string
 }) {
+  const { t } = useLang()
   const [open, setOpen] = useState(false)
+  const priorityLabel = t(`priority.${task.priority}` as any) || task.priority
   return (
     <div
       draggable={draggable}
@@ -3272,8 +3221,8 @@ function TaskRow({
           className="task-checkbox"
           aria-label={
             task.completed
-              ? `Mark ${task.title} incomplete`
-              : `Mark ${task.title} complete`
+              ? t("plan.markIncomplete", { title: task.title })
+              : t("plan.markComplete", { title: task.title })
           }
           aria-pressed={!!task.completed}
         >
@@ -3289,13 +3238,13 @@ function TaskRow({
             onChange={(e) => update({ title: e.target.value })}
             onClick={(e) => e.stopPropagation()}
             className="task-title"
-            aria-label="Task title"
+            aria-label={t("plan.taskTitleAria")}
           />
           <span className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
             <span
               className={`priority priority-${task.priority.toLowerCase()}`}
             >
-              {task.priority}
+              {priorityLabel}
             </span>
             <span>{task.duration}</span>
             <span>·</span>
@@ -3307,7 +3256,7 @@ function TaskRow({
             disabled={index === 0}
             onClick={() => move(-1)}
             className="icon-button"
-            aria-label="Move task up"
+            aria-label={t("plan.moveTaskUp")}
           >
             <ArrowUp size={14} />
           </button>
@@ -3315,14 +3264,14 @@ function TaskRow({
             disabled={index === total - 1}
             onClick={() => move(1)}
             className="icon-button"
-            aria-label="Move task down"
+            aria-label={t("plan.moveTaskDown")}
           >
             <ArrowDown size={14} />
           </button>
           <button
             onClick={() => setOpen(!open)}
             className="icon-button"
-            aria-label={open ? "Collapse task details" : "Expand task details"}
+            aria-label={open ? t("plan.collapseDetails") : t("plan.expandDetails")}
             aria-expanded={open}
           >
             <ChevronDown size={14} className={open ? "rotate-180" : ""} />
@@ -3332,7 +3281,7 @@ function TaskRow({
       {open && (
         <div className="ml-6 mt-4 grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
           <label className="mini-field sm:col-span-2">
-            Description
+            {t("plan.description")}
             <textarea
               value={task.description}
               onChange={(e) => update({ description: e.target.value })}
@@ -3340,42 +3289,42 @@ function TaskRow({
             />
           </label>
           <label className="mini-field">
-            Priority
+            {t("plan.priority")}
             <select
               value={task.priority}
               onChange={(e) =>
                 update({ priority: e.target.value as Task["priority"] })
               }
             >
-              <option>High</option>
-              <option>Medium</option>
-              <option>Low</option>
+              <option value="High">{t("priority.High")}</option>
+              <option value="Medium">{t("priority.Medium")}</option>
+              <option value="Low">{t("priority.Low")}</option>
             </select>
           </label>
           <label className="mini-field">
-            Duration
+            {t("plan.duration")}
             <input
               value={task.duration}
               onChange={(e) => update({ duration: e.target.value })}
             />
           </label>
           <label className="mini-field">
-            Dependency
+            {t("plan.dependency")}
             <input
-              aria-label="Task dependency"
+              aria-label={t("plan.taskDependencyAria")}
               value={task.dependency}
               onChange={(e) => update({ dependency: e.target.value })}
             />
           </label>
           <label className="mini-field">
-            Required resource
+            {t("plan.requiredResource")}
             <input
               value={task.resource}
               onChange={(e) => update({ resource: e.target.value })}
             />
           </label>
           <label className="mini-field sm:col-span-2">
-            Deliverable
+            {t("plan.deliverable")}
             <input
               value={task.deliverable}
               onChange={(e) => update({ deliverable: e.target.value })}
@@ -3386,7 +3335,7 @@ function TaskRow({
             className="flex items-center gap-2 text-xs font-medium text-red-600"
           >
             <Trash2 size={13} />
-            Remove task
+            {t("plan.removeTask")}
           </button>
         </div>
       )}
@@ -3427,12 +3376,13 @@ function SettingsScreen({
   const [authBusy, setAuthBusy] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"editor" | "viewer">("editor")
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false)
   useEffect(() => {
     if (auth.user?.name) setProfileName(auth.user.name)
   }, [auth.user?.name])
   const signIn = async () => {
     const error = await auth.signIn(email, password)
-    setAuthMessage(error ?? "Signed in successfully.")
+    setAuthMessage(error ?? t("settings.signedInOk"))
     if (!error) {
       setEmail("")
       setPassword("")
@@ -3440,11 +3390,11 @@ function SettingsScreen({
   }
   const signUp = async () => {
     const error = await auth.signUp(email, password)
-    setAuthMessage(error ?? "Account created. Check your inbox if confirmation is required.")
+    setAuthMessage(error ?? t("settings.accountCreated"))
   }
   const signOut = async () => {
     await auth.signOut()
-    setAuthMessage("Signed out.")
+    setAuthMessage(t("settings.signedOut"))
   }
   return (
     <div className="page">
@@ -3713,28 +3663,37 @@ function SettingsScreen({
 
                 <Setting
                   icon={Info}
-                  title="Danger zone"
-                  description="Permanently delete your account and projects."
+                  title={t("settings.dangerZone")}
+                  description={t("settings.dangerDesc")}
                 >
                   <button
-                    onClick={async () => {
-                      const ok = window.confirm("Delete your account permanently? This cannot be undone.")
-                      if (!ok) return
-                      setAuthBusy(true)
-                      const err = await auth.deleteAccount()
-                      setAuthMessage(err ?? "Account deleted.")
-                      setAuthBusy(false)
-                    }}
+                    onClick={() => setDeleteAccountOpen(true)}
                     className="btn-secondary text-red-600"
                     disabled={authBusy}
                   >
-                    Delete account
+                    {t("settings.deleteAccount")}
                   </button>
                 </Setting>
 
+                <ConfirmationDialog
+                  open={deleteAccountOpen}
+                  title={t("dialog.deleteAccountTitle")}
+                  description={t("dialog.deleteAccountDesc")}
+                  confirmLabel={t("settings.deleteAccount")}
+                  danger
+                  onClose={() => setDeleteAccountOpen(false)}
+                  onConfirm={async () => {
+                    setDeleteAccountOpen(false)
+                    setAuthBusy(true)
+                    const err = await auth.deleteAccount()
+                    setAuthMessage(err ?? t("settings.accountDeleted"))
+                    setAuthBusy(false)
+                  }}
+                />
+
                 <div className="settings-actions">
                   <button onClick={signOut} className="btn-secondary">
-                    Sign out
+                    {t("common.signOut")}
                   </button>
                 </div>
               </>
@@ -4476,7 +4435,7 @@ function CouncilTab({
 
   const startRun = async () => {
     if (!benchUrl || running) return
-    const id = crypto.randomUUID()
+    const id = createId()
     setRunId(id)
     setFinalResult(null)
     setRunning(true)
@@ -5257,9 +5216,19 @@ export default function App() {
         await syncOfflineProjects()
         const fresh = await loadProjects(auth.user!.id)
         if (!active || !fresh.length) return
-        setProjects(fresh)
-      } catch {
-        // ignore
+        // Merge to avoid clobbering edits made while the background sync ran.
+        setProjects((current) => {
+          const byId = new Map(fresh.map((p) => [p.id, p]))
+          const merged = current.map((p) => {
+            const remote = byId.get(p.id)
+            if (!remote) return p
+            return Date.parse(remote.updatedAt || "") > Date.parse(p.updatedAt || "") ? remote : p
+          })
+          for (const p of fresh) if (!current.some((c) => c.id === p.id)) merged.push(p)
+          return merged
+        })
+      } catch (error) {
+        console.warn("Multi-device sync failed", error)
       }
     }
     const interval = window.setInterval(refresh, 30000)
@@ -5275,18 +5244,21 @@ export default function App() {
   }, [auth.user?.id])
 
   useEffect(() => {
-    localStorage.setItem("leanie-theme", theme)
+    try {
+      localStorage.setItem("leanie-theme", theme)
+    } catch {
+      // ignore storage errors
+    }
     document.documentElement.style.colorScheme = theme
     document.documentElement.dataset.theme = theme
   }, [theme])
-  useEffect(
-    () =>
-      localStorage.setItem(
-        "leanie-sidebar",
-        collapsed ? "collapsed" : "expanded",
-      ),
-    [collapsed],
-  )
+  useEffect(() => {
+    try {
+      localStorage.setItem("leanie-sidebar", collapsed ? "collapsed" : "expanded")
+    } catch {
+      // ignore storage errors
+    }
+  }, [collapsed])
   useEffect(() => {
     if (screen !== "shared") return
     let raw = location.hash.slice(1)
@@ -5348,7 +5320,7 @@ export default function App() {
   }, [])
   const notify = useCallback(
     (kind: ToastKind, title: string, message?: string) => {
-      const id = crypto.randomUUID()
+      const id = createId()
       setToasts((items) => [...items, { id, kind, title, message }].slice(-4))
       window.setTimeout(
         () => setToasts((items) => items.filter((item) => item.id !== id)),
@@ -5384,7 +5356,7 @@ export default function App() {
       if (file.name.toLowerCase().endsWith(".json")) {
         const source = JSON.parse(text) as Partial<Project>
         project = {
-          id: crypto.randomUUID(),
+          id: createId(),
           title: source.title?.trim() || file.name.replace(/\\.json$/i, ""),
           objective: source.objective?.trim() || "Imported project",
           context: source.context?.trim() || "",
@@ -5418,7 +5390,7 @@ export default function App() {
           const title = taskIdx >= 0 ? cols[taskIdx] : cols[0]
           if (!title) continue
           tasks.push({
-            id: crypto.randomUUID(),
+            id: createId(),
             title,
             description: (phaseIdx >= 0 ? cols[phaseIdx] : "Imported task") ?? "",
             priority: "Medium",
@@ -5429,7 +5401,7 @@ export default function App() {
           })
         }
         project = {
-          id: crypto.randomUUID(),
+          id: createId(),
           title: file.name.replace(/\\.csv$/i, ""),
           objective: "Imported project",
           context: `Imported ${tasks.length} tasks from CSV.`,
@@ -5439,7 +5411,7 @@ export default function App() {
           status: "Draft",
           phases: [
             {
-              id: crypto.randomUUID(),
+              id: createId(),
               title: "Imported phase",
               objective: "Tasks imported from CSV",
               tasks,
@@ -5461,7 +5433,7 @@ export default function App() {
         }
         const objective = sections.slice(0, 3).join(" ").slice(0, 400) || "Imported project"
         project = {
-          id: crypto.randomUUID(),
+          id: createId(),
           title,
           objective,
           context: sections.join("\\n").slice(0, 2000),
@@ -5471,12 +5443,12 @@ export default function App() {
           status: "Draft",
           phases: [
             {
-              id: crypto.randomUUID(),
+              id: createId(),
               title: "Discovery",
               objective: "Phase extracted from imported markdown",
               tasks: [
                 {
-                  id: crypto.randomUUID(),
+                  id: createId(),
                   title: "Review imported content",
                   description: sections.slice(0, 5).join(" ") || "Imported markdown.",
                   priority: "Medium",
@@ -5511,7 +5483,7 @@ export default function App() {
     const now = new Date().toISOString()
     const project: Project = {
       ...form,
-      id: crypto.randomUUID(),
+      id: createId(),
       createdAt: now,
       updatedAt: now,
       status: "Analyzing",
@@ -5623,7 +5595,7 @@ export default function App() {
   return (
     <div className={`app-shell theme-${theme}`}>
       <a href="#main-content" className="skip-link">
-        Skip to content
+        {t("a11y.skipToContent")}
       </a>
       <Sidebar
         screen={screen}
@@ -5697,9 +5669,9 @@ export default function App() {
       <ConfirmationDialog
         open={!!deleteTarget}
         danger
-        title="Delete this project?"
-        description={`“${deleteTarget?.title}” and its local analysis will be permanently removed from this browser. This action cannot be undone.`}
-        confirmLabel="Delete project"
+        title={t("dialog.deleteProjectTitle")}
+        description={t("dialog.deleteProjectDesc", { title: deleteTarget?.title ?? "" })}
+        confirmLabel={t("common.delete")}
         onClose={() => setDeleteTarget(null)}
         onConfirm={deleteProject}
       />

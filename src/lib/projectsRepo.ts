@@ -1,6 +1,7 @@
 import type { Project, Phase, Risk } from "../types"
 import { neonClient } from "./neon"
 import { trackEvent } from "./observability"
+import { createId } from "./id"
 
 const STORAGE_KEY = "leanie-projects-v1"
 
@@ -112,7 +113,12 @@ export async function saveProject(project: Project, userId?: string | null): Pro
   const next = current.some((p) => p.id === project.id)
     ? current.map((p) => (p.id === project.id ? project : p))
     : [project, ...current]
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  } catch (error) {
+    console.error("saveProject: failed to persist local cache", error)
+    throw error
+  }
   trackEvent("project.save", { projectId: project.id, mode: "local" })
 }
 
@@ -124,10 +130,15 @@ export async function removeProject(id: string, userId?: string | null): Promise
     return
   }
   const current = await loadProjects(null)
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(current.filter((p) => p.id !== id)),
-  )
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(current.filter((p) => p.id !== id)),
+    )
+  } catch (error) {
+    console.error("removeProject: failed to persist local cache", error)
+    throw error
+  }
   trackEvent("project.remove", { projectId: id, mode: "local" })
 }
 
@@ -144,7 +155,11 @@ function readOfflineQueue(): Array<{ userId: string; project: Project }> {
 export function queueProjectForSync(project: Project, userId: string) {
   const queue = readOfflineQueue().filter((item) => !(item.userId === userId && item.project.id === project.id))
   queue.push({ userId, project })
-  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue))
+  try {
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue))
+  } catch (error) {
+    console.warn("queueProjectForSync: could not persist offline queue", error)
+  }
 }
 
 export async function syncOfflineProjects() {
@@ -161,7 +176,11 @@ export async function syncOfflineProjects() {
       remaining.push(item)
     }
   }
-  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(remaining))
+  try {
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(remaining))
+  } catch (error) {
+    console.warn("syncOfflineProjects: could not persist remaining queue", error)
+  }
 }
 
 export async function createProjectShare(projectId: string, token: string, userId: string | null, role: string = "editor", expiresAt: string | null = null) {
@@ -222,7 +241,8 @@ export async function loadSharedProject(token: string) {
       const response = await fetch(`${shareUrl}?token=${encodeURIComponent(token)}`)
       if (!response.ok) return null
       return fromRow(await response.json())
-    } catch {
+    } catch (error) {
+      console.warn("loadSharedProject: network error", error)
       return null
     }
   }
@@ -249,11 +269,11 @@ function ephemeralPresenceId(): string {
     const key = "leanie-presence-id"
     const existing = sessionStorage.getItem(key)
     if (existing) return existing
-    const id = `anon-${crypto.randomUUID()}`
+    const id = `anon-${createId()}`
     sessionStorage.setItem(key, id)
     return id
   } catch {
-    return `anon-${crypto.randomUUID()}`
+    return `anon-${createId()}`
   }
 }
 

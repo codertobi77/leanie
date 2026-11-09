@@ -1,11 +1,13 @@
 import { AlertTriangle, X } from "lucide-react"
 import { useEffect, useRef } from "react"
+import { useLang } from "../lib/i18n"
 
 export function ConfirmationDialog({
   open,
   title,
   description,
   confirmLabel,
+  cancelLabel,
   danger = false,
   onConfirm,
   onClose,
@@ -14,10 +16,12 @@ export function ConfirmationDialog({
   title: string
   description: string
   confirmLabel: string
+  cancelLabel?: string
   danger?: boolean
   onConfirm: () => void
   onClose: () => void
 }) {
+  const { t } = useLang()
   const cancelRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (!open) return
@@ -52,7 +56,7 @@ export function ConfirmationDialog({
           <button
             onClick={onClose}
             className="icon-button"
-            aria-label="Close dialog"
+            aria-label={t("a11y.closeDialog")}
           >
             <X size={18} />
           </button>
@@ -66,7 +70,7 @@ export function ConfirmationDialog({
         <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
         <div className="mt-6 flex justify-end gap-3">
           <button ref={cancelRef} onClick={onClose} className="btn-secondary">
-            Cancel
+            {cancelLabel ?? t("common.cancel")}
           </button>
           <button
             onClick={onConfirm}

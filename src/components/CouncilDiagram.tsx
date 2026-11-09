@@ -15,11 +15,11 @@ import {
 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { analysts } from "../data"
+import { useLang } from "../lib/i18n"
 import type {
   BenchmarkRunRow,
   CouncilStepDetail,
   CouncilStepName,
-  LeanieProvider,
   Project,
 } from "../types"
 
@@ -61,6 +61,7 @@ export function CouncilDiagram({
   onPause: () => void
   onReplay: () => void
 }) {
+  const { t } = useLang()
   const [selected, setSelected] = useState<NodeId | null>(null)
   const [hovered, setHovered] = useState<NodeId | null>(null)
   const focused = selected ?? hovered
@@ -90,27 +91,25 @@ export function CouncilDiagram({
   const rawDetail =
     selected === "input"
       ? {
-          title: "Project idea",
-          role: "User-provided context",
-          status: stage > 0 ? "Distributed" : "Preparing",
+          title: t("diagram.projectIdea"),
+          role: t("diagram.userProvidedContext"),
+          status: stage > 0 ? t("diagram.distributed") : t("diagram.preparing"),
           summary: project.objective,
         }
       : selected === "arbiter"
         ? {
-            title: "Arbiter",
-            role: "Synthesis and decision",
+            title: t("diagram.arbiter"),
+            role: t("diagram.synthesisDecision"),
             status:
-              stage > 3 ? "Completed" : stage === 3 ? "Arbitrating" : "Pending",
-            summary:
-              "Compares evidence, maps disagreements, weighs risks, and resolves trade-offs into one recommendation.",
+              stage > 3 ? t("diagram.completed") : stage === 3 ? t("diagram.arbitrating") : t("diagram.pending"),
+            summary: t("diagram.arbiterSummary"),
           }
         : selected === "output"
           ? {
-              title: "Project intelligence",
-              role: "Final structured output",
-              status: stage === 4 ? "Ready" : "Pending",
-              summary:
-                "A consolidated analysis and editable phased plan with risks, assumptions, dependencies, and success criteria.",
+              title: t("diagram.projectIntelligence"),
+              role: t("diagram.finalOutput"),
+              status: stage === 4 ? t("diagram.ready") : t("diagram.pending"),
+              summary: t("diagram.outputSummary"),
             }
           : specialistMeta.find((item) => item.id === selected)?.agent
   const detail =
@@ -121,7 +120,7 @@ export function CouncilDiagram({
           title: rawDetail.role,
           role: rawDetail.description,
           status:
-            stage > 1 ? "Completed" : stage === 1 ? "Analyzing" : "Pending",
+            stage > 1 ? t("diagram.completed") : stage === 1 ? t("council.processing") : t("diagram.pending"),
           summary: rawDetail.preview,
         })
 
@@ -129,25 +128,25 @@ export function CouncilDiagram({
     <div className="council-visual">
       <div className="council-toolbar">
         <div>
-          <span>COUNCIL ARCHITECTURE</span>
-          <p>State-driven simulation · no live AI inference</p>
+          <span>{t("diagram.architecture")}</span>
+          <p>{t("diagram.simSubtitle")}</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={onPause}
             className="council-control"
-            aria-label={paused ? "Resume visualization" : "Pause visualization"}
+            aria-label={paused ? t("diagram.resumeViz") : t("diagram.pauseViz")}
           >
             {paused ? <Play size={14} /> : <Pause size={14} />}
-            {paused ? "Resume" : "Pause"}
+            {paused ? t("diagram.resume") : t("diagram.pause")}
           </button>
           <button
             onClick={onReplay}
             className="council-control"
-            aria-label="Replay visualization"
+            aria-label={t("diagram.replayViz")}
           >
             <RotateCcw size={14} />
-            Replay
+            {t("diagram.replay")}
           </button>
         </div>
       </div>
@@ -200,9 +199,9 @@ export function CouncilDiagram({
             <FileInput size={18} />
           </span>
           <span className="node-copy">
-            <strong>Project idea</strong>
-            <small>User input</small>
-            <em>{done("input") ? "Distributed" : "Entering Council"}</em>
+            <strong>{t("diagram.projectIdea")}</strong>
+            <small>{t("diagram.userInput")}</small>
+            <em>{done("input") ? t("diagram.distributed") : t("diagram.enteringCouncil")}</em>
           </span>
         </button>
         <div className="specialist-stack">
@@ -224,10 +223,10 @@ export function CouncilDiagram({
                 <small>{agent.description}</small>
                 <em>
                   {done(id)
-                    ? "Completed"
+                    ? t("diagram.completed")
                     : active(id)
-                      ? "Analyzing in parallel"
-                      : "Pending"}
+                      ? t("diagram.analyzingParallel")
+                      : t("diagram.pending")}
                 </em>
               </span>
               {done(id) && <Check size={14} className="node-check" />}
@@ -248,16 +247,16 @@ export function CouncilDiagram({
             <Scale size={19} />
           </span>
           <span className="node-copy">
-            <strong>Arbiter</strong>
-            <small>Compares & resolves</small>
+            <strong>{t("diagram.arbiter")}</strong>
+            <small>{t("diagram.comparesResolves")}</small>
             <em>
               {done("arbiter")
-                ? "Synthesis complete"
+                ? t("diagram.synthesisComplete")
                 : active("arbiter")
-                  ? "Resolving trade-offs"
+                  ? t("diagram.resolvingTradeoffs")
                   : stage === 2
-                    ? "Receiving perspectives"
-                    : "Pending"}
+                    ? t("diagram.receivingPerspectives")
+                    : t("diagram.pending")}
             </em>
           </span>
         </button>
@@ -273,20 +272,20 @@ export function CouncilDiagram({
             <FileOutput size={18} />
           </span>
           <span className="node-copy">
-            <strong>Project intelligence</strong>
-            <small>Analysis + plan</small>
-            <em>{active("output") ? "Ready" : "Pending"}</em>
+            <strong>{t("diagram.projectIntelligence")}</strong>
+            <small>{t("diagram.analysisPlan")}</small>
+            <em>{active("output") ? t("diagram.ready") : t("diagram.pending")}</em>
           </span>
         </button>
         {stage >= 2 && (
           <div
             className="signal-chips"
-            aria-label="Converging contribution types"
+            aria-label={t("diagram.convergingTypes")}
           >
-            <span>Agreement</span>
-            <span>Risk</span>
-            <span>Trade-off</span>
-            <span>Recommendation</span>
+            <span>{t("diagram.agreement")}</span>
+            <span>{t("diagram.risk")}</span>
+            <span>{t("diagram.tradeoff")}</span>
+            <span>{t("diagram.recommendation")}</span>
           </div>
         )}
       </div>
@@ -294,12 +293,12 @@ export function CouncilDiagram({
         <div className="agent-panel">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <span>SELECTED CONTRIBUTION</span>
+              <span>{t("diagram.selectedContribution")}</span>
               <h3>{detail.title}</h3>
             </div>
             <button
               onClick={() => setSelected(null)}
-              aria-label="Close agent details"
+              aria-label={t("diagram.closeDetails")}
             >
               <X size={16} />
             </button>
@@ -313,11 +312,11 @@ export function CouncilDiagram({
             <div className="agent-evidence">
               <span>
                 <Check size={12} />
-                Agreement: validate before full investment
+                {t("diagram.agreementEvidence")}
               </span>
               <span>
                 <BrainCircuit size={12} />
-                Tension: breadth versus testability
+                {t("diagram.tensionEvidence")}
               </span>
             </div>
           )}
@@ -343,6 +342,7 @@ export function AdminCouncilDiagram({
   run: BenchmarkRunRow | null
   connection: string | null
 }) {
+  const { t } = useLang()
   const [selected, setSelected] = useState<NodeId | null>(null)
   const [hovered, setHovered] = useState<NodeId | null>(null)
   const focused = selected ?? hovered
@@ -389,11 +389,11 @@ export function AdminCouncilDiagram({
     const status = statusOf(id)
     const step = adminStepOf[id]
     const detail = stepDetail(step)
-    if (status === "running") return `Running ${resolvedModel(step) || "…"}`
+    if (status === "running") return `${t("common.running")} ${resolvedModel(step) || "…"}`
     if (status === "done" && detail)
       return `✓ ${(detail.latencyMs / 1000).toFixed(1)}s · ${detail.totalTokens.toLocaleString()} tok`
-    if (status === "failed") return "Failed"
-    return "Pending"
+    if (status === "failed") return t("diagram.failed")
+    return t("diagram.pending")
   }
 
   const outputMetrics = (run?.result?.metrics ?? null) as
@@ -412,9 +412,9 @@ export function AdminCouncilDiagram({
     if (!selected) return null
     if (selected === "input") {
       return {
-        title: "Benchmark brief",
+        title: t("diagram.benchBrief"),
         role: "Admin sample input",
-        status: run ? "Distributed to the council" : "Waiting for a run",
+        status: run ? t("diagram.benchDistributed") : t("diagram.waitingRun"),
         summary:
           "Standard sample brief used for admin model comparisons. Every benchmark run sends this brief through the configured pipeline.",
         metrics: null,
@@ -423,18 +423,18 @@ export function AdminCouncilDiagram({
     }
     if (selected === "output") {
       return {
-        title: "Project intelligence",
-        role: "Final structured output",
+        title: t("diagram.projectIntelligence"),
+        role: t("diagram.finalOutput"),
         status:
           run?.status === "done"
-            ? "Ready"
+            ? t("diagram.ready")
             : run?.status === "failed"
-              ? "Failed"
+              ? t("diagram.failed")
               : run?.status === "running"
-                ? "Streaming"
-                : "Pending",
+                ? t("diagram.streaming")
+                : t("diagram.pending"),
         summary: run?.status === "done" && outputMetrics
-          ? `Completed in ${((outputMetrics.latencyMs ?? 0) / 1000).toFixed(1)}s · ${(
+          ? `${((outputMetrics.latencyMs ?? 0) / 1000).toFixed(1)}s · ${(
               outputMetrics.tokens?.total ?? 0
             ).toLocaleString()} tokens · $${(outputMetrics.costUsd ?? 0).toFixed(4)} · quality ${
               outputMetrics.scores?.analysisQuality ?? "—"
@@ -442,7 +442,7 @@ export function AdminCouncilDiagram({
               outputMetrics.scores?.coherence ?? "—"
             }/100${outputMetrics.configName ? ` · config: ${outputMetrics.configName}` : ""}`
           : run?.status === "failed"
-            ? run.error ?? "The run failed before producing an output."
+            ? run.error ?? t("diagram.failed")
             : "The consolidated analysis and phased plan appear here once the run completes.",
         metrics: null,
         error: run?.status === "failed" ? run.error : null,
@@ -457,12 +457,12 @@ export function AdminCouncilDiagram({
       role: agent?.description ?? "",
       status:
         status === "running"
-          ? "Analyzing"
+          ? t("council.processing")
           : status === "done"
-            ? "Completed"
+            ? t("diagram.completed")
             : status === "failed"
-              ? "Failed"
-              : "Pending",
+              ? t("diagram.failed")
+              : t("diagram.pending"),
       summary: detailRow
         ? `${detailRow.provider} · ${detailRow.model} · ${(detailRow.latencyMs / 1000).toFixed(1)}s · ${detailRow.totalTokens.toLocaleString()} tokens (${detailRow.promptTokens} prompt / ${detailRow.completionTokens} completion) · $${detailRow.costUsd.toFixed(4)} · JSON ${detailRow.jsonValid ? "valid" : "invalid"}`
         : agent?.preview ?? "",
@@ -475,8 +475,8 @@ export function AdminCouncilDiagram({
     <div className="council-visual">
       <div className="council-toolbar">
         <div>
-          <span>COUNCIL ARCHITECTURE</span>
-          <p>Live benchmark · progress streams over Neon Realtime</p>
+          <span>{t("diagram.architecture")}</span>
+          <p>{t("diagram.benchSubtitle")}</p>
         </div>
         {connection && (
           <span className="council-control">
@@ -528,9 +528,9 @@ export function AdminCouncilDiagram({
             <FileInput size={18} />
           </span>
           <span className="node-copy">
-            <strong>Benchmark brief</strong>
-            <small>Standard sample brief</small>
-            <em>{run ? "Distributed" : "Entering Council"}</em>
+            <strong>{t("diagram.benchBrief")}</strong>
+            <small>{t("diagram.sampleBrief")}</small>
+            <em>{run ? t("diagram.distributed") : t("diagram.enteringCouncil")}</em>
           </span>
         </button>
         <div className="specialist-stack">
@@ -572,8 +572,8 @@ export function AdminCouncilDiagram({
             <Scale size={19} />
           </span>
           <span className="node-copy">
-            <strong>Arbiter</strong>
-            <small>Compares &amp; resolves</small>
+            <strong>{t("diagram.arbiter")}</strong>
+            <small>{t("diagram.comparesResolves")}</small>
             <em>{stepStatusLine("arbiter")}</em>
           </span>
           {statusOf("arbiter") === "done" && <Check size={14} className="node-check" />}
@@ -591,27 +591,27 @@ export function AdminCouncilDiagram({
             <FileOutput size={18} />
           </span>
           <span className="node-copy">
-            <strong>Project intelligence</strong>
-            <small>Analysis + plan</small>
+            <strong>{t("diagram.projectIntelligence")}</strong>
+            <small>{t("diagram.analysisPlan")}</small>
             <em>
               {statusOf("output") === "done" && outputMetrics
                 ? `✓ ${((outputMetrics.latencyMs ?? 0) / 1000).toFixed(1)}s · ${
                     (outputMetrics.tokens?.total ?? 0).toLocaleString()
                   } tok`
                 : statusOf("output") === "running"
-                  ? "Streaming…"
+                  ? t("diagram.streaming")
                   : statusOf("output") === "failed"
-                    ? "Failed"
-                    : "Pending"}
+                    ? t("diagram.failed")
+                    : t("diagram.pending")}
             </em>
           </span>
         </button>
         {stage >= 2 && (
-          <div className="signal-chips" aria-label="Converging contribution types">
-            <span>Agreement</span>
-            <span>Risk</span>
-            <span>Trade-off</span>
-            <span>Recommendation</span>
+          <div className="signal-chips" aria-label={t("diagram.convergingTypes")}>
+            <span>{t("diagram.agreement")}</span>
+            <span>{t("diagram.risk")}</span>
+            <span>{t("diagram.tradeoff")}</span>
+            <span>{t("diagram.recommendation")}</span>
           </div>
         )}
       </div>
@@ -619,10 +619,10 @@ export function AdminCouncilDiagram({
         <div className="agent-panel">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <span>SELECTED CONTRIBUTION</span>
+              <span>{t("diagram.selectedContribution")}</span>
               <h3>{detail.title}</h3>
             </div>
-            <button onClick={() => setSelected(null)} aria-label="Close details">
+            <button onClick={() => setSelected(null)} aria-label={t("diagram.closeDetails")}>
               <X size={16} />
             </button>
           </div>
