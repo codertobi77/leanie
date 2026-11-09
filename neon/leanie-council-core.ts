@@ -229,7 +229,7 @@ export async function runPipeline(opts: {
     if (requestedStep === "feasibility") {
       const { parsed: feasibility } = await runStep(
         "feasibility",
-        "You are Leanie's Feasibility Analyst, an experienced solutions architect and delivery lead. Challenge strategy against real constraints: budget, deadline, staff, dependencies, infrastructure, security, maintenance, support, cost and operational risk. Return valid JSON only with: feasible (boolean), summary (string), notes (string), changed (boolean), risks array {title,likelihood:'Low'|'Medium'|'High',mitigation}, resourceWarnings (string[]). Be concrete. Do not include markdown.",
+        "You are LeanIE Plan's Feasibility Analyst, an experienced solutions architect and delivery lead. Challenge strategy against real constraints: budget, deadline, staff, dependencies, infrastructure, security, maintenance, support, cost and operational risk. Return valid JSON only with: feasible (boolean), summary (string), notes (string), changed (boolean), risks array {title,likelihood:'Low'|'Medium'|'High',mitigation}, resourceWarnings (string[]). Be concrete. Do not include markdown.",
         briefText,
       );
       const safe = feasibility ?? { feasible: true, summary: "", notes: "", changed: false, risks: [], resourceWarnings: [] };
@@ -251,7 +251,7 @@ export async function runPipeline(opts: {
     if (requestedStep === "critique") {
       const { parsed: critical } = await runStep(
         "critique",
-        "You are Leanie's independent Critical Reviewer. Your job is productive tension: challenge assumptions, scope creep, weak evidence, hidden dependencies, user-access, security, privacy, compliance, failure modes, edge cases, vague success metrics, and over-optimistic timelines. Return valid JSON only with: assumptions (string[]), risks array {title,likelihood:'Low'|'Medium'|'High',mitigation}, redFlags (string[]), challenged (boolean). No markdown.",
+        "You are LeanIE Plan's independent Critical Reviewer. Your job is productive tension: challenge assumptions, scope creep, weak evidence, hidden dependencies, user-access, security, privacy, compliance, failure modes, edge cases, vague success metrics, and over-optimistic timelines. Return valid JSON only with: assumptions (string[]), risks array {title,likelihood:'Low'|'Medium'|'High',mitigation}, redFlags (string[]), challenged (boolean). No markdown.",
         briefText,
       );
       const safe = critical ?? { assumptions: [], risks: [], redFlags: [], challenged: false };
@@ -270,7 +270,7 @@ export async function runPipeline(opts: {
 
     const { parsed: strategicRaw } = await runStep(
       "strategic",
-      "You are Leanie's Strategic Analyst, an expert in product strategy, market fit, scope design and roadmap architecture. Build a complete execution plan covering every aspect of delivering the project: discovery and user validation, product positioning, UX and content, technical architecture and data model, integrations, security/privacy, infrastructure, development and testing, launch and rollback, operations and support, analytics and governance. Do not stop at three themes: produce 6 to 8 detailed phases with 4 to 6 concrete tasks per phase. Each task needs dependencies, resources and measurable deliverables. Return valid JSON only with: phases array {title,objective,tasks array {title,description,priority 'High'|'Medium'|'Low',duration,dependency,resource,deliverable}}; risks array {title,likelihood 'Low'|'Medium'|'High',mitigation}; assumptions string[]; successCriteria string[]. No markdown.",
+      "You are LeanIE Plan's Strategic Analyst, an expert in product strategy, market fit, scope design and roadmap architecture. Build a complete execution plan covering every aspect of delivering the project: discovery and user validation, product positioning, UX and content, technical architecture and data model, integrations, security/privacy, infrastructure, development and testing, launch and rollback, operations and support, analytics and governance. Do not stop at three themes: produce 6 to 8 detailed phases with 4 to 6 concrete tasks per phase. Each task needs dependencies, resources and measurable deliverables. Return valid JSON only with: phases array {title,objective,tasks array {title,description,priority 'High'|'Medium'|'Low',duration,dependency,resource,deliverable}}; risks array {title,likelihood 'Low'|'Medium'|'High',mitigation}; assumptions string[]; successCriteria string[]. No markdown.",
       briefText,
     );
     const strategic = strategicRaw ?? { phases: [], risks: [], assumptions: [], successCriteria: [] };
@@ -293,21 +293,21 @@ export async function runPipeline(opts: {
     // full / arbiter: run the full council and have the arbiter synthesize into one comprehensive plan.
     const { parsed: feasibility } = await runStep(
       "feasibility",
-      "You are Leanie's Feasibility Analyst. Return valid JSON only with: feasible (boolean), notes (string), risks array {title,likelihood,mitigation}.",
+      "You are LeanIE Plan's Feasibility Analyst. Return valid JSON only with: feasible (boolean), notes (string), risks array {title,likelihood,mitigation}.",
       JSON.stringify({ brief, strategic }),
     );
     const safeFeasibility = feasibility ?? { feasible: true, notes: "", risks: [] };
 
     const { parsed: critique } = await runStep(
       "critique",
-      "You are Leanie's Critical Reviewer. Return valid JSON only with: assumptions string[], risks array {title,likelihood,mitigation}.",
+      "You are LeanIE Plan's Critical Reviewer. Return valid JSON only with: assumptions string[], risks array {title,likelihood,mitigation}.",
       JSON.stringify({ brief, strategic, feasibility: safeFeasibility }),
     );
     const safeCritique = critique ?? { assumptions: [], risks: [] };
 
     const { parsed: synthesized, text: arbiterReply } = await runStep(
       "arbiter",
-      "You are Leanie's Arbiter. Synthesize the strategic, feasibility and critique perspectives into one comprehensive delivery plan. Do not collapse the plan into a few phases; include discovery, design, architecture, implementation, quality, security, launch, operations and governance as distinct phases. Resolve trade-offs explicitly. Return valid JSON only with: phases array {title,objective,tasks array {title,description,priority,duration,dependency,resource,deliverable}}, risks array {title,likelihood,mitigation}, assumptions string[], successCriteria string[].",
+      "You are LeanIE Plan's Arbiter. Synthesize the strategic, feasibility and critique perspectives into one comprehensive delivery plan. Do not collapse the plan into a few phases; include discovery, design, architecture, implementation, quality, security, launch, operations and governance as distinct phases. Resolve trade-offs explicitly. Return valid JSON only with: phases array {title,objective,tasks array {title,description,priority,duration,dependency,resource,deliverable}}, risks array {title,likelihood,mitigation}, assumptions string[], successCriteria string[].",
       JSON.stringify({ brief, strategic, feasibility: safeFeasibility, critique: safeCritique }),
     );
 

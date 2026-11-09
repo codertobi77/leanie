@@ -1,5 +1,6 @@
 {
-  "description": "Turn project ideas into realistic, actionable plans with AI Council analysis that evaluates feasibility, challenges assumptions, and highlights risks.",
+  "title": "LeanIE Plan — Lean Intelligence Engine",
+  "description": "LeanIE Plan, part of the LeanIE suite (Lean Intelligence Engine) by LiteTECH Solutions. Turn project ideas into realistic, actionable plans with AI Council analysis that evaluates feasibility, challenges assumptions, and highlights risks.",
   "robots": {
     "index": false
   },

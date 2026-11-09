@@ -1,4 +1,4 @@
-# Leanie — Roadmap P3 à P6
+# LeanIE Plan — Roadmap P3 à P6
 
 Statut : P1/P2 livrés et déployés (commits jusqu'à `a247bc0` inclus) — P3 à P6 restent à implémenter.
 Mise à jour : 2026-11-06.
