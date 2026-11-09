@@ -35,10 +35,6 @@ export default async function leanieCouncil(request: Request): Promise<Response>
   const briefTitle = String(brief.title || "").slice(0, 200);
 
   const fallbackTarget = envTarget(safeModel || defaultModel());
-  if (!fallbackTarget.apiKey) {
-    return new Response(JSON.stringify(demoResult(brief, requestedStep, true)), { headers: cors });
-  }
-
   const runStartedAt = Date.now();
   let plan: Record<string, StepTarget> = {};
   let configId: string | null = null;
@@ -57,6 +53,13 @@ export default async function leanieCouncil(request: Request): Promise<Response>
   // Steps without a configured target fall back to the default provider/model.
   for (const step of ["strategic", "feasibility", "critique", "arbiter"]) {
     if (!plan[step]) plan[step] = fallbackTarget;
+  }
+
+  // Only use demo if no step has a valid API key
+  const hasAnyKey = Object.values(plan).some((t: any) => t && t.apiKey && t.apiKey.length > 0);
+  if (!hasAnyKey) {
+    await pool.end().catch(() => {});
+    return new Response(JSON.stringify(demoResult(brief, requestedStep, true)), { headers: cors });
   }
 
   const result = await runPipeline({ brief, requestedStep, plan });

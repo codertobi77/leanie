@@ -1680,7 +1680,7 @@ function CouncilScreen({
   project: Project
   complete: (result?: any) => void
 }) {
-  const [stage, setStage] = useState<CouncilStage>(0)
+  const [stage, setStage] = useState(0)
   const [paused, setPaused] = useState(false)
   const [failed, setFailed] = useState(false)
   const { t } = useLang()
@@ -1690,6 +1690,7 @@ function CouncilScreen({
   completeRef.current = complete
   const resultRef = useRef(result)
   resultRef.current = result
+  const [progress, setProgress] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -1709,8 +1710,13 @@ function CouncilScreen({
           body: JSON.stringify(buildCouncilBrief(project)),
         })
         const data = await response.json()
-        if (!cancelled && response.ok && !data.error) setResult(data)
-        if (!cancelled && (!response.ok || data.error)) setFailed(true)
+        if (!cancelled && response.ok && !data.error) {
+          setResult(data)
+          setProgress(100)
+        }
+        if (!cancelled && (!response.ok || data.error)) {
+          setFailed(true)
+        }
       } catch {
         if (!cancelled) setFailed(true)
       }
@@ -1723,30 +1729,52 @@ function CouncilScreen({
 
   useEffect(() => {
     if (paused || failed) return
-    if (stage === 4) {
+    if (progress >= 100) {
       const done = window.setTimeout(
         () => completeRef.current(resultRef.current),
-        1800,
+        1000,
       )
       return () => clearTimeout(done)
     }
-    const timer = window.setTimeout(
-      () => setStage((value) => Math.min(value + 1, 4) as CouncilStage),
-      stage === 1 ? 2500 : 1700,
-    )
-    return () => clearTimeout(timer)
-  }, [failed, paused, stage])
+    const interval = window.setInterval(() => {
+      setProgress((p) => {
+        if (p >= 100) return 100
+        // Smooth progress with easing
+        const increment = p < 30 ? 3 : p < 60 ? 2 : p < 90 ? 1.5 : 1
+        const next = Math.min(p + increment + Math.random() * 0.5, 100)
+        return next
+      })
+      setStage((s) => {
+        if (progress >= 90 && s < 5) return 5
+        if (progress >= 75 && s < 4) return 4
+        if (progress >= 55 && s < 3) return 3
+        if (progress >= 35 && s < 2) return 2
+        if (progress >= 15 && s < 1) return 1
+        return s
+      })
+    }, 400)
+    return () => clearInterval(interval)
+  }, [failed, paused, progress])
+
   const stages = [
-    "Input distributed",
-    "Parallel analysis",
-    "Perspectives converge",
-    "Arbitration",
+    "Input preparation",
+    "Strategic analysis",
+    "Feasibility analysis",
+    "Critical review",
+    "Arbitration & synthesis",
     "Intelligence ready",
+  ]
+  const councilSteps = [
+    { name: "Strategic", desc: "Market opportunity & positioning" },
+    { name: "Feasibility", desc: "Resources, timeline & constraints" },
+    { name: "Critique", desc: "Risks, assumptions & gaps" },
+    { name: "Arbitration", desc: "Synthesis & recommendations" },
   ]
   const replay = () => {
     setFailed(false)
     setPaused(false)
     setStage(0)
+    setProgress(0)
   }
   return (
     <div className="page page-enter">
@@ -1761,16 +1789,16 @@ function CouncilScreen({
         <p>{t("council.subtitle")}</p>
         <div className="big-progress">
           <span>
-            <i style={{ width: `${(stage + 1) * 20}%` }} />
+            <i style={{ width: `${Math.min(progress, 100)}%`, transition: "width 0.4s ease-out" }} />
           </span>
-          <b>{(stage + 1) * 20}%</b>
+          <b>{Math.round(Math.min(progress, 100))}%</b>
         </div>
         <div className="stage-list">
           {stages.map((label, index) => (
             <div
               key={label}
               className={
-                index === stage ? "current" : index < stage ? "complete" : ""
+                index < stage ? "complete" : index === stage ? "current" : ""
               }
             >
               <span>
@@ -1787,16 +1815,29 @@ function CouncilScreen({
                         : t("council.processing")}
                   </em>
                 )}
-                {index === stage && (
-                  <small>
-                    {t("council.stageOf")
-                      .replace("{n}", String(stage + 1))
-                      .replace("{stage}", stages[stage])}
-                  </small>
-                )}
               </p>
             </div>
           ))}
+        </div>
+        <div className="mt-6 border-t border-[var(--line)] pt-4">
+          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--muted)]">Council Analysis Steps</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {councilSteps.map((step, idx) => {
+              const active = progress >= 15 + idx * 20
+              const done = progress >= 35 + idx * 20
+              return (
+                <div key={step.name} className={`flex items-center gap-2 rounded-[3px] border p-2 ${done ? "border-[var(--positive)] bg-[var(--positive)]/5" : active ? "border-[var(--accent)] bg-[var(--accent)]/5" : "border-[var(--line)]"}`}>
+                  <span className={`grid h-6 w-6 place-items-center rounded-[2px] border text-xs ${done ? "border-[var(--positive)] text-[var(--positive)]" : active ? "border-[var(--accent)] text-[var(--accent)]" : "border-[var(--line)] text-[var(--muted)]"}`}>
+                    {done ? <Check size={12} /> : idx + 1}
+                  </span>
+                  <div className="flex-1 text-left">
+                    <p className="text-xs font-medium">{step.name}</p>
+                    <p className="text-[10px] text-[var(--muted)]">{step.desc}</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
         <div className="mock-banner">
           <i className="pulse-dot" />
@@ -1806,7 +1847,7 @@ function CouncilScreen({
       <div className="mt-5">
         <CouncilDiagram
           project={project}
-          stage={stage}
+          stage={Math.min(stage, 4) as CouncilStage}
           paused={paused}
           onPause={() => setPaused((value) => !value)}
           onReplay={replay}
