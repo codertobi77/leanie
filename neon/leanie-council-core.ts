@@ -74,13 +74,15 @@ export function isMetaProviderRow(providerRow: any): boolean {
 }
 
 function resolveConcreteTarget(providerRow: any, model: string, fallback: StepTarget): StepTarget | null {
-  if (!providerRow?.base_url || !providerRow?.api_key) return null;
+  if (!providerRow?.base_url) return null;
+  const apiKey = providerRow?.api_key || process.env.NVIDIA_NIM_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+  if (!apiKey) return null;
   const prices = modelPrice(providerRow, model, fallback);
   return {
     providerId: String(providerRow.id),
     provider: String(providerRow.name),
     baseUrl: String(providerRow.base_url).replace(/\/+$/, ""),
-    apiKey: String(providerRow.api_key),
+    apiKey: String(apiKey),
     model,
     ...prices,
   };
