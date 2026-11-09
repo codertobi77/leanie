@@ -26,6 +26,46 @@ export interface Risk {
   mitigation: string
 }
 
+export type ProjectMaturity = "Idea" | "Concept" | "Prototype" | "Pilot" | "Scaling"
+export type FundingStatus = "Not yet defined" | "Not funded" | "Seeking funding" | "Partially secured" | "Secured"
+export type RiskTolerance = "Not yet defined" | "Low" | "Moderate" | "High"
+
+export interface ProjectIntakeCoreIdea {
+  projectSummary: string
+  problemStatement: string
+  targetBeneficiaries: string
+  proposedSolution: string
+  mainObjectives: string
+  expectedResults: string
+  sectors: string[]
+  projectLocation: string
+  projectDuration: string
+  projectMaturity: ProjectMaturity
+  additionalContext: string
+}
+
+export interface ProjectIntakeConstraints {
+  availableBudget: string
+  fundingStatus: FundingStatus
+  availableResources: string
+  teamComposition: string
+  implementationDeadline: string
+  keyMilestones: string
+  geographicalConstraints: string
+  regulatoryConstraints: string
+  technicalConstraints: string
+  operationalConstraints: string
+  nonNegotiableRequirements: string
+  riskTolerance: RiskTolerance
+  preferredImplementationApproach: string
+  knownAssumptions: string
+}
+
+export interface ProjectIntake {
+  coreIdea: ProjectIntakeCoreIdea
+  constraints: ProjectIntakeConstraints
+}
+
 export interface Project {
   id: string
   title: string
@@ -44,6 +84,8 @@ export interface Project {
   successCriteria?: string[]
   tags?: string[]
   revision?: number
+  /** Rich intake (Core idea + Constraints). Schema-compatible via encoded context persistence. */
+  intake?: ProjectIntake
 }
 
 export interface ProjectFormData {
@@ -54,6 +96,7 @@ export interface ProjectFormData {
   targetDate: string
   budget: string
   resources: string
+  intake: ProjectIntake
 }
 
 export interface Analyst {

@@ -1,7 +1,8 @@
-import type { Project, Phase, Risk } from "../types"
+import type { Project, Phase, Risk, ProjectIntake } from "../types"
 import { neonClient } from "./neon"
 import { trackEvent } from "./observability"
 import { createId } from "./id"
+import { decodeContextWithIntake, defaultIntake, encodeContextWithIntake, intakeToLegacyFields } from "./intake"
 
 const STORAGE_KEY = "leanie-projects-v1"
 
@@ -9,35 +10,49 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : []
 }
 
-function toRow(project: Project, userId: string) {
+function projectForPersistence(project: Project): Project {
+  if (!project.intake) return project
+  const legacy = intakeToLegacyFields(project.title, project.intake)
   return {
-    id: project.id,
+    ...project,
+    ...legacy,
+    context: encodeContextWithIntake(legacy.context, project.intake),
+  }
+}
+
+function toRow(project: Project, userId: string) {
+  const p = projectForPersistence(project)
+  return {
+    id: p.id,
     user_id: userId,
-    title: project.title,
-    objective: project.objective,
-    context: project.context,
-    outcome: project.outcome,
-    target_date: project.targetDate ?? null,
-    budget: project.budget ?? null,
-    resources: project.resources ?? null,
-    status: project.status,
-    phases: project.phases,
-    risks: project.risks,
-    assumptions: project.assumptions ?? [],
-    success_criteria: project.successCriteria ?? [],
-    tags: project.tags ?? [],
-    revision: project.revision ?? 1,
-    created_at: project.createdAt,
-    updated_at: project.updatedAt,
+    title: p.title,
+    objective: p.objective,
+    context: p.context,
+    outcome: p.outcome,
+    target_date: p.targetDate ?? null,
+    budget: p.budget ?? null,
+    resources: p.resources ?? null,
+    status: p.status,
+    phases: p.phases,
+    risks: p.risks,
+    assumptions: p.assumptions ?? [],
+    success_criteria: p.successCriteria ?? [],
+    tags: p.tags ?? [],
+    revision: p.revision ?? 1,
+    created_at: p.createdAt,
+    updated_at: p.updatedAt,
   }
 }
 
 function fromRow(row: any): Project {
+  const decoded = decodeContextWithIntake(row.context ?? "")
+  const intake: ProjectIntake | undefined = decoded.intake ?? undefined
+  const tags = asArray<string>(row.tags)
   return {
     id: row.id,
     title: row.title,
     objective: row.objective,
-    context: row.context ?? "",
+    context: decoded.context || row.context || "",
     outcome: row.outcome ?? "",
     targetDate: row.target_date ?? undefined,
     budget: row.budget ?? undefined,
@@ -49,8 +64,9 @@ function fromRow(row: any): Project {
     risks: asArray<Risk>(row.risks),
     assumptions: asArray<string>(row.assumptions),
     successCriteria: asArray<string>(row.success_criteria),
-    tags: asArray<string>(row.tags),
+    tags,
     revision: Number(row.revision ?? 1),
+    intake,
   }
 }
 
@@ -211,10 +227,11 @@ export async function persistSharedProject(project: Project, token: string) {
   const shareUrl = import.meta.env.VITE_NEON_FUNCTION_SHARE_BASE_URL as string | undefined
   if (!shareUrl) return { status: "unavailable" as const }
   try {
+    const p = projectForPersistence(project)
     const response = await fetch(shareUrl, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=UTF-8" },
-      body: JSON.stringify({ token, project, revision: project.revision ?? 1 }),
+      body: JSON.stringify({ token, project: p, revision: p.revision ?? 1 }),
     })
     const data = await response.json()
     if (response.status === 409 && data.current) {

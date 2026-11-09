@@ -111,6 +111,16 @@ import {
 import { parseCsvRows } from "./lib/csv"
 import { createId } from "./lib/id"
 import {
+  buildCouncilBrief,
+  defaultIntake,
+  formDataToIntake,
+  FUNDING_STATUS_OPTIONS,
+  intakeToLegacyFields,
+  MATURITY_OPTIONS,
+  RISK_TOLERANCE_OPTIONS,
+  SECTORS,
+} from "./lib/intake"
+import {
   formatDate,
   formatToday,
   useLang,
@@ -126,6 +136,7 @@ const blankForm: ProjectFormData = {
   targetDate: "",
   budget: "",
   resources: "",
+  intake: defaultIntake(),
 }
 const navItems: { id: Screen; label: import("./lib/i18n").DictKey; icon: typeof Home }[] = [
   { id: "overview", label: "nav.overview", icon: LayoutDashboard },
@@ -1427,6 +1438,17 @@ function ProjectsScreen({
   )
 }
 
+
+function sectorKey(sector: string): string {
+  const map: Record<string, string> = {
+    Agriculture: "agriculture", Education: "education", Health: "health", Energy: "energy",
+    "Water & sanitation": "water", "Climate & environment": "climate", "Digital & technology": "digital",
+    "Financial inclusion": "financial", "Governance & civic": "governance", Humanitarian: "humanitarian",
+    Infrastructure: "infrastructure", "Livelihoods & jobs": "livelihoods", Other: "other",
+  }
+  return map[sector] || "other"
+}
+
 function ProjectForm({
   submit,
   cancel,
@@ -1434,273 +1456,214 @@ function ProjectForm({
   submit: (f: ProjectFormData) => void
   cancel: () => void
 }) {
-  const [form, setForm] = useState(blankForm)
+  const { t } = useLang()
+  const [form, setForm] = useState<ProjectFormData>(() => ({ ...blankForm, intake: defaultIntake() }))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [step, setStep] = useState(0)
-  const { t } = useLang()
-  const steps = [t("form.step1"), t("form.step2"), t("form.step3")]
-  const update = (key: keyof ProjectFormData, value: string) => {
-    setForm((current) => ({ ...current, [key]: value }))
-    setErrors((current) => ({ ...current, [key]: "" }))
+  const steps = [t("intake.coreIdea"), t("intake.constraints"), t("intake.review")]
+
+  const setTitle = (title: string) => {
+    setForm((f) => ({ ...f, title }))
+    setErrors((e) => ({ ...e, title: "" }))
   }
+  const setCore = <K extends keyof ProjectFormData["intake"]["coreIdea"]>(key: K, value: ProjectFormData["intake"]["coreIdea"][K]) => {
+    setForm((f) => ({ ...f, intake: { ...f.intake, coreIdea: { ...f.intake.coreIdea, [key]: value } } }))
+    setErrors((e) => ({ ...e, [`core.${String(key)}`]: "" }))
+  }
+  const setCons = <K extends keyof ProjectFormData["intake"]["constraints"]>(key: K, value: ProjectFormData["intake"]["constraints"][K]) => {
+    setForm((f) => ({ ...f, intake: { ...f.intake, constraints: { ...f.intake.constraints, [key]: value } } }))
+    setErrors((e) => ({ ...e, [`cons.${String(key)}`]: "" }))
+  }
+  const toggleSector = (sector: string) => {
+    setCore(
+      "sectors",
+      form.intake.coreIdea.sectors.includes(sector)
+        ? form.intake.coreIdea.sectors.filter((s) => s !== sector)
+        : [...form.intake.coreIdea.sectors, sector],
+    )
+  }
+
   const validateStep = () => {
     const next: Record<string, string> = {}
     if (step === 0) {
-      if (!form.title.trim()) next.title = t("form.errTitle")
-      if (form.objective.trim().length < 20)
-        next.objective = t("form.errObjective")
-      if (form.context.trim().length < 20)
-        next.context = t("form.errContext")
-      if (!form.outcome.trim()) next.outcome = t("form.errOutcome")
+      if (!form.title.trim()) next.title = t("intake.errTitle")
+      if ((form.intake.coreIdea.projectSummary || "").trim().length < 15) next["core.projectSummary"] = t("intake.errSummary")
+      if ((form.intake.coreIdea.problemStatement || "").trim().length < 15) next["core.problemStatement"] = t("intake.errProblem")
     }
+    // Step 1 (constraints): no hard requirements; "Not yet defined" allowed
     setErrors(next)
     return !Object.keys(next).length
   }
-  const next = () => {
-    if (validateStep()) setStep((value) => Math.min(value + 1, 2))
-  }
-  const field = (
-    key: keyof ProjectFormData,
-    label: string,
-    placeholder: string,
-    helper?: string,
-    area = false,
-    max = 800,
-  ) => (
+  const next = () => { if (validateStep()) setStep((v) => Math.min(v + 1, 2)) }
+
+  const Err = ({ k }: { k: string }) =>
+    errors[k] ? (
+      <em className="validation-message"><AlertCircle size={13} />{errors[k]}</em>
+    ) : null
+
+  const Field = ({ label, hint, error, children }: { label: string; hint?: string; error?: string; children: React.ReactNode }) => (
     <label className="field">
       <span>{label}</span>
-      {helper && <small>{helper}</small>}
-      {area ? (
-        <>
-          <textarea
-            rows={3}
-            value={form[key]}
-            maxLength={max}
-            onChange={(event) => update(key, event.target.value)}
-            onInput={(event) => {
-              const target = event.currentTarget
-              target.style.height = "auto"
-              target.style.height = `${target.scrollHeight}px`
-            }}
-            placeholder={placeholder}
-            className={errors[key] ? "input-error" : ""}
-          />
-          <span className="character-count">
-            {form[key].length} / {max}
-          </span>
-        </>
-      ) : (
-        <input
-          value={form[key]}
-          onChange={(event) => update(key, event.target.value)}
-          placeholder={placeholder}
-          className={errors[key] ? "input-error" : ""}
-        />
-      )}
-      {errors[key] && (
-        <em className="validation-message">
-          <AlertCircle size={13} />
-          {errors[key]}
-        </em>
-      )}
+      {hint && <small>{hint}</small>}
+      {children}
+      {error && <em className="validation-message"><AlertCircle size={13} />{error}</em>}
     </label>
   )
+
+  const inputCls = (k?: string) => (k && errors[k] ? "input-error" : "")
+
+  const c = form.intake.coreIdea
+  const k = form.intake.constraints
+
   return (
     <div className="page max-w-4xl page-enter">
-      <button onClick={cancel} className="back-button">
-        <ArrowLeft size={15} />
-        {t("form.backToOverview")}
-      </button>
+      <button onClick={cancel} className="back-button"><ArrowLeft size={15} />{t("form.backToOverview")}</button>
       <div className="mt-7">
         <p className="page-kicker">{t("form.kicker")}</p>
-        <h2 className="page-title max-w-2xl">
-          {t("form.heading")}
-        </h2>
-        <p className="page-subtitle max-w-2xl">
-          {t("form.subheading")}
-        </p>
+        <h2 className="page-title max-w-2xl">{t("form.heading")}</h2>
+        <p className="page-subtitle max-w-2xl">{t("form.subheading")}</p>
       </div>
       <div className="form-progress mt-8">
         {steps.map((label, index) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => index < step && setStep(index)}
-            className={
-              index === step ? "active" : index < step ? "complete" : ""
-            }
-          >
+          <button key={label} type="button" onClick={() => index < step && setStep(index)} className={index === step ? "active" : index < step ? "complete" : ""}>
             <span>{index < step ? <Check size={12} /> : index + 1}</span>
             <em>{label}</em>
           </button>
         ))}
-        <div className="form-progress-line">
-          <span style={{ width: `${step * 50}%` }} />
-        </div>
+        <div className="form-progress-line"><span style={{ width: `${step * 50}%` }} /></div>
       </div>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (step < 2) next()
-          else submit(form)
-        }}
-        className="form-shell mt-9"
-      >
+      <form onSubmit={(e) => { e.preventDefault(); if (step < 2) next(); else submit(form) }} className="form-shell mt-9">
         <div key={step} className="form-step-enter">
           {step === 0 && (
             <div className="grid gap-6">
               <div className="form-section-heading">
                 <span>01</span>
-                <div>
-                  <h3>Frame the decision</h3>
-                  <p>
-                    Describe what the Council should test and why it matters
-                    now.
-                  </p>
+                <div><h3>{t("intake.coreIdea")}</h3><p>{t("intake.coreIdeaDesc")}</p></div>
+              </div>
+              <Field label={t("intake.projectTitle")} error={errors.title}>
+                <input value={form.title} onChange={(e) => setTitle(e.target.value)} placeholder={t("intake.projectTitlePh")} className={inputCls("title")} />
+              </Field>
+              <Field label={t("intake.summary")} error={errors["core.projectSummary"]}>
+                <textarea rows={3} value={c.projectSummary} onChange={(e) => setCore("projectSummary", e.target.value)} placeholder={t("intake.summaryPh")} className={inputCls("core.projectSummary")} />
+              </Field>
+              <Field label={t("intake.problem")} hint={t("intake.problemPh")} error={errors["core.problemStatement"]}>
+                <textarea rows={3} value={c.problemStatement} onChange={(e) => setCore("problemStatement", e.target.value)} className={inputCls("core.problemStatement")} />
+              </Field>
+              <Field label={t("intake.beneficiaries")} hint={t("intake.beneficiariesPh")}>
+                <textarea rows={2} value={c.targetBeneficiaries} onChange={(e) => setCore("targetBeneficiaries", e.target.value)} />
+              </Field>
+              <Field label={t("intake.solution")}>
+                <textarea rows={3} value={c.proposedSolution} onChange={(e) => setCore("proposedSolution", e.target.value)} placeholder={t("intake.solutionPh")} />
+              </Field>
+              <Field label={t("intake.objectives")}>
+                <textarea rows={3} value={c.mainObjectives} onChange={(e) => setCore("mainObjectives", e.target.value)} placeholder={t("intake.objectivesPh")} />
+              </Field>
+              <Field label={t("intake.expectedResults")} hint={t("intake.expectedResultsPh")}>
+                <textarea rows={3} value={c.expectedResults} onChange={(e) => setCore("expectedResults", e.target.value)} />
+              </Field>
+              <div className="field">
+                <span>{t("intake.sectors")}</span>
+                <small>{t("intake.sectorsPh")}</small>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {SECTORS.map((s) => {
+                    const active = c.sectors.includes(s)
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => toggleSector(s)}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${active ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}
+                      >
+                        {t((`intake.sector.${sectorKey(s)}`) as any) || s}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
-              {field(
-                "title",
-                "Project title",
-                "e.g. Validate a new service concept",
-              )}
-              {field(
-                "objective",
-                "Main objective or problem to solve",
-                "What decision, problem, or opportunity should the Council examine?",
-                "Focus on the central question rather than a proposed solution.",
-                true,
-                500,
-              )}
-              {field(
-                "context",
-                "Context and background",
-                "What has led to this point? What evidence or uncertainty already exists?",
-                "Include known facts, stakeholders, and open questions.",
-                true,
-                900,
-              )}
-              {field(
-                "outcome",
-                "Expected outcome",
-                "What would a useful result make possible?",
-                undefined,
-                true,
-                500,
-              )}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={t("intake.location")}><input value={c.projectLocation} onChange={(e) => setCore("projectLocation", e.target.value)} placeholder={t("intake.locationPh")} /></Field>
+                <Field label={t("intake.duration")}><input value={c.projectDuration} onChange={(e) => setCore("projectDuration", e.target.value)} placeholder={t("intake.durationPh")} /></Field>
+              </div>
+              <Field label={t("intake.maturity")}>
+                <select value={c.projectMaturity} onChange={(e) => setCore("projectMaturity", e.target.value as any)}>
+                  {MATURITY_OPTIONS.map((m) => <option key={m} value={m}>{t((`intake.maturity.${m}`) as any)}</option>)}
+                </select>
+              </Field>
+              <Field label={t("intake.additionalContext")}><textarea rows={2} value={c.additionalContext} onChange={(e) => setCore("additionalContext", e.target.value)} placeholder={t("intake.additionalContextPh")} /></Field>
             </div>
           )}
           {step === 1 && (
             <div className="grid gap-6">
               <div className="form-section-heading">
                 <span>02</span>
-                <div>
-                  <h3>Ground the analysis</h3>
-                  <p>
-                    Optional constraints help the Feasibility Analyst produce a
-                    more realistic recommendation.
-                  </p>
-                </div>
+                <div><h3>{t("intake.constraints")}</h3><p>{t("intake.constraintsDesc")}</p></div>
               </div>
-              <label className="field">
-                <span>
-                  Target date <small className="inline">(optional)</small>
-                </span>
-                <input
-                  type="date"
-                  value={form.targetDate}
-                  onChange={(event) => update("targetDate", event.target.value)}
-                />
-              </label>
-              {field(
-                "budget",
-                "Budget or financial constraint",
-                "e.g. Maximum $15,000",
-              )}
-              {field(
-                "resources",
-                "Available resources",
-                "e.g. One designer, two engineers",
-                "Include people, tools, access, and time that are already available.",
-                true,
-                500,
-              )}
-              <div className="context-tip">
-                <Lightbulb size={17} />
-                <p>
-                  <strong>Useful detail:</strong> Unknown constraints are valid.
-                  The Critical Reviewer will identify what must be clarified.
-                </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={t("intake.budget")} hint={t("intake.budgetPh")}><input value={k.availableBudget} onChange={(e) => setCons("availableBudget", e.target.value)} /></Field>
+                <Field label={t("intake.fundingStatus")}>
+                  <select value={k.fundingStatus} onChange={(e) => setCons("fundingStatus", e.target.value as any)}>
+                    {FUNDING_STATUS_OPTIONS.map((o) => <option key={o} value={o}>{t((`intake.funding.${o}`) as any)}</option>)}
+                  </select>
+                </Field>
               </div>
+              <Field label={t("intake.resourcesAvail")} hint={t("intake.resourcesAvailPh")}><textarea rows={2} value={k.availableResources} onChange={(e) => setCons("availableResources", e.target.value)} /></Field>
+              <Field label={t("intake.team")} hint={t("intake.teamPh")}><textarea rows={2} value={k.teamComposition} onChange={(e) => setCons("teamComposition", e.target.value)} /></Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={t("intake.deadline")} hint={t("intake.deadlinePh")}><input value={k.implementationDeadline} onChange={(e) => setCons("implementationDeadline", e.target.value)} /></Field>
+                <Field label={t("intake.riskTolerance")}>
+                  <select value={k.riskTolerance} onChange={(e) => setCons("riskTolerance", e.target.value as any)}>
+                    {RISK_TOLERANCE_OPTIONS.map((o) => <option key={o} value={o}>{t((`intake.risk.${o}`) as any)}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <Field label={t("intake.milestones")}><textarea rows={2} value={k.keyMilestones} onChange={(e) => setCons("keyMilestones", e.target.value)} placeholder={t("intake.milestonesPh")} /></Field>
+              <Field label={t("intake.geoConstraints")}><textarea rows={2} value={k.geographicalConstraints} onChange={(e) => setCons("geographicalConstraints", e.target.value)} placeholder={t("intake.geoConstraintsPh")} /></Field>
+              <Field label={t("intake.regulatory")}><textarea rows={2} value={k.regulatoryConstraints} onChange={(e) => setCons("regulatoryConstraints", e.target.value)} placeholder={t("intake.regulatoryPh")} /></Field>
+              <Field label={t("intake.technical")}><textarea rows={2} value={k.technicalConstraints} onChange={(e) => setCons("technicalConstraints", e.target.value)} placeholder={t("intake.technicalPh")} /></Field>
+              <Field label={t("intake.operational")}><textarea rows={2} value={k.operationalConstraints} onChange={(e) => setCons("operationalConstraints", e.target.value)} placeholder={t("intake.operationalPh")} /></Field>
+              <Field label={t("intake.nonNegotiable")}><textarea rows={2} value={k.nonNegotiableRequirements} onChange={(e) => setCons("nonNegotiableRequirements", e.target.value)} placeholder={t("intake.nonNegotiablePh")} /></Field>
+              <Field label={t("intake.approach")}><textarea rows={2} value={k.preferredImplementationApproach} onChange={(e) => setCons("preferredImplementationApproach", e.target.value)} placeholder={t("intake.approachPh")} /></Field>
+              <Field label={t("intake.knownAssumptions")}><textarea rows={2} value={k.knownAssumptions} onChange={(e) => setCons("knownAssumptions", e.target.value)} placeholder={t("intake.knownAssumptionsPh")} /></Field>
             </div>
           )}
           {step === 2 && (
-            <div className="grid gap-5">
+            <div className="grid gap-6">
               <div className="form-section-heading">
                 <span>03</span>
-                <div>
-                  <h3>Review the Council brief</h3>
-                  <p>
-                    Confirm the distinction between what you know and what the
-                    Council will need to assume.
-                  </p>
-                </div>
+                <div><h3>{t("intake.review")}</h3><p>{t("form.reviewDesc")}</p></div>
               </div>
-              {[
-                ["Project", form.title],
-                ["Objective", form.objective],
-                ["Context", form.context],
-                ["Expected outcome", form.outcome],
-              ].map(([label, value]) => (
-                <div key={label} className="review-row">
-                  <span>{label}</span>
-                  <p>{value}</p>
-                  <button type="button" onClick={() => setStep(0)}>
-                    Edit
-                  </button>
-                </div>
-              ))}
-              <div className="review-row">
-                <span>Constraints</span>
-                <p>
-                  {[form.targetDate, form.budget, form.resources]
-                    .filter(Boolean)
-                    .join(" · ") || "No explicit constraints provided"}
-                </p>
-                <button type="button" onClick={() => setStep(1)}>
-                  Edit
-                </button>
+              <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-700 sm:p-6">
+                <div><strong>{t("intake.projectTitle")}:</strong> {form.title || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.summary")}:</strong> {c.projectSummary || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.problem")}:</strong> {c.problemStatement || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.beneficiaries")}:</strong> {c.targetBeneficiaries || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.solution")}:</strong> {c.proposedSolution || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.objectives")}:</strong> {c.mainObjectives || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.expectedResults")}:</strong> {c.expectedResults || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.sectors")}:</strong> {c.sectors.length ? c.sectors.join(", ") : t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.location")}:</strong> {c.projectLocation || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.duration")}:</strong> {c.projectDuration || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.maturity")}:</strong> {t((`intake.maturity.${c.projectMaturity}`) as any)}</div>
+                <hr className="my-2 border-slate-200" />
+                <div><strong>{t("intake.budget")}:</strong> {k.availableBudget || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.fundingStatus")}:</strong> {t((`intake.funding.${k.fundingStatus}`) as any)}</div>
+                <div><strong>{t("intake.resourcesAvail")}:</strong> {k.availableResources || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.team")}:</strong> {k.teamComposition || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.deadline")}:</strong> {k.implementationDeadline || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.riskTolerance")}:</strong> {t((`intake.risk.${k.riskTolerance}`) as any)}</div>
+                <div><strong>{t("intake.regulatory")}:</strong> {k.regulatoryConstraints || t("intake.notYetDefined")}</div>
+                <div><strong>{t("intake.technical")}:</strong> {k.technicalConstraints || t("intake.notYetDefined")}</div>
               </div>
-              <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs leading-5 text-blue-900">
-                <Info size={16} className="mt-0.5 shrink-0" />
-                <p>
-                  This starts a deterministic simulation. It does not send your
-                  brief to a live AI service.
-                </p>
-              </div>
+              <p className="text-xs text-slate-500">{t("form.simNotice")}</p>
             </div>
           )}
         </div>
-        <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            type="button"
-            onClick={() => (step ? setStep(step - 1) : cancel())}
-            className="btn-secondary"
-          >
-            {step ? t("form.back") : t("form.cancel")}
-          </button>
-          <div className="flex items-center gap-4">
+        <div className="mt-8 flex items-center justify-between gap-3">
+          <button type="button" onClick={step === 0 ? cancel : () => setStep((v) => v - 1)} className="btn-secondary">{step === 0 ? t("form.cancel") : t("form.back")}</button>
+          <div className="flex items-center gap-3">
             <span className="text-xs text-slate-400">{t("form.stepOf", { n: step + 1 })}</span>
             <button type="submit" className="btn-primary">
-              {step === 2 ? (
-                <>
-                  {t("form.createProject")} <Sparkles size={16} />
-                </>
-              ) : (
-                <>
-                  {t("form.next")} <ArrowRight size={16} />
-                </>
-              )}
+              {step === 2 ? <>{t("form.createProject")} <Sparkles size={16} /></> : <>{t("form.next")} <ArrowRight size={16} /></>}
             </button>
           </div>
         </div>
@@ -1708,6 +1671,7 @@ function ProjectForm({
     </div>
   )
 }
+
 
 function CouncilScreen({
   project,
@@ -1740,16 +1704,9 @@ function CouncilScreen({
           method: "POST",
           headers: {
             "Content-Type": "text/plain;charset=UTF-8",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({
-            title: project.title,
-            objective: project.objective,
-            context: project.context,
-            outcome: project.outcome,
-            targetDate: project.targetDate,
-            budget: project.budget,
-            resources: project.resources,
-          }),
+          body: JSON.stringify(buildCouncilBrief(project)),
         })
         const data = await response.json()
         if (!cancelled && response.ok && !data.error) setResult(data)
@@ -2422,16 +2379,7 @@ function PlanScreen({
           "Content-Type": "text/plain;charset=UTF-8",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          step: replayStep,
-          title: project.title,
-          objective: project.objective,
-          context: project.context,
-          outcome: project.outcome,
-          targetDate: project.targetDate,
-          budget: project.budget,
-          resources: project.resources,
-        }),
+        body: JSON.stringify({ step: replayStep, ...buildCouncilBrief(project) }),
       })
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error ?? "Council request failed")
@@ -5479,15 +5427,20 @@ export default function App() {
   }
 
   const createProject = (form: ProjectFormData) => {
+    const intake = formDataToIntake(form)
+    const legacy = intakeToLegacyFields(form.title, intake)
     const plan = cloneDemoPlan()
     const now = new Date().toISOString()
     const project: Project = {
-      ...form,
+      ...legacy,
+      intake,
       id: createId(),
       createdAt: now,
       updatedAt: now,
       status: "Analyzing",
       ...plan,
+      // keep tags from intake/legacy unless plan overrides meaningfully
+      tags: legacy.tags?.length ? legacy.tags : plan.tags,
     }
     setProjects((p) => [project, ...p])
     setSelectedId(project.id)

@@ -249,7 +249,62 @@ export async function runPipeline(opts: {
   const { brief, requestedStep, plan, onStep } = opts;
   const fallback = envTarget(defaultModel());
   const targetFor = (step: string): StepTarget => plan[step] || fallback;
-  const briefText = JSON.stringify(brief);
+  const formatBrief = (b: any): string => {
+    if (!b || typeof b !== "object") return String(b ?? "")
+    const intake = b.intake
+    if (!intake || typeof intake !== "object") return JSON.stringify(b)
+    const c = intake.coreIdea || {}
+    const k = intake.constraints || {}
+    const line = (label: string, v: unknown) => {
+      if (Array.isArray(v)) return v.length ? `${label}: ${v.join(", ")}` : ""
+      const s = String(v ?? "").trim()
+      return s ? `${label}: ${s}` : ""
+    }
+    const sections = [
+      ["# Project", [line("Title", b.title)]],
+      ["## Core idea", [
+        line("Summary", c.projectSummary),
+        line("Problem statement", c.problemStatement),
+        line("Target beneficiaries", c.targetBeneficiaries),
+        line("Proposed solution", c.proposedSolution),
+        line("Main objectives", c.mainObjectives),
+        line("Expected results", c.expectedResults),
+        line("Sector(s)", c.sectors),
+        line("Location", c.projectLocation),
+        line("Duration", c.projectDuration),
+        line("Maturity", c.projectMaturity),
+        line("Additional context", c.additionalContext),
+      ]],
+      ["## Constraints", [
+        line("Available budget", k.availableBudget),
+        line("Funding status", k.fundingStatus),
+        line("Available resources", k.availableResources),
+        line("Team composition", k.teamComposition),
+        line("Implementation deadline", k.implementationDeadline),
+        line("Key milestones", k.keyMilestones),
+        line("Geographical constraints", k.geographicalConstraints),
+        line("Regulatory constraints", k.regulatoryConstraints),
+        line("Technical constraints", k.technicalConstraints),
+        line("Operational constraints", k.operationalConstraints),
+        line("Non-negotiable requirements", k.nonNegotiableRequirements),
+        line("Risk tolerance", k.riskTolerance),
+        line("Preferred implementation approach", k.preferredImplementationApproach),
+        line("Known assumptions", k.knownAssumptions),
+      ]],
+    ]
+    const text = sections
+      .map(([h, lines]) => {
+        const body = (lines as string[]).filter(Boolean).join("\n")
+        return body ? `${h}\n${body}` : ""
+      })
+      .filter(Boolean)
+      .join("\n\n")
+    const unknown = Array.isArray(b.unknownOrNotYetDefined) && b.unknownOrNotYetDefined.length
+      ? `\n\n## Not yet defined / unknown\n- ${b.unknownOrNotYetDefined.join("\n- ")}`
+      : ""
+    return text ? `${text}${unknown}` : JSON.stringify(b)
+  }
+  const briefText = formatBrief(brief);
 
   const steps: StepDetail[] = [];
   const usage = { prompt: 0, completion: 0, total: 0 };
