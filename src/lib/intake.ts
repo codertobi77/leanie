@@ -122,32 +122,45 @@ export function decodeContextWithIntake(raw: string | undefined | null): { conte
 
 /** Build a legacy-compatible Project baseline from intake + form identity. */
 export function intakeToLegacyFields(title: string, intake: ProjectIntake) {
-  const c = intake.coreIdea
-  const k = intake.constraints
-  const contextParts = [
-    c.problemStatement && `Problem: ${c.problemStatement}`,
-    c.targetBeneficiaries && `Beneficiaries: ${c.targetBeneficiaries}`,
-    c.additionalContext && `Additional context: ${c.additionalContext}`,
-    c.projectLocation && `Location: ${c.projectLocation}`,
-    c.sectors?.length ? `Sectors: ${c.sectors.join(", ")}` : "",
-  ].filter(Boolean)
-  const resourceParts = [k.availableResources, k.teamComposition].filter(isDefinedValue)
-  return {
-    title: title.trim(),
-    objective: normalizeOptional(c.mainObjectives) || normalizeOptional(c.projectSummary) || title.trim(),
-    context: contextParts.join("\n"),
-    outcome: normalizeOptional(c.expectedResults) || normalizeOptional(c.proposedSolution) || "",
-    targetDate: normalizeOptional(k.implementationDeadline) || undefined,
-    budget: normalizeOptional(k.availableBudget) || undefined,
-    resources: resourceParts.join("\n") || undefined,
-    tags: [...(c.sectors || []), c.projectMaturity].filter(Boolean),
+  try {
+    const c = intake.coreIdea || ({} as any)
+    const k = intake.constraints || ({} as any)
+    const contextParts = [
+      c.problemStatement && `Problem: ${c.problemStatement}`,
+      c.targetBeneficiaries && `Beneficiaries: ${c.targetBeneficiaries}`,
+      c.additionalContext && `Additional context: ${c.additionalContext}`,
+      c.projectLocation && `Location: ${c.projectLocation}`,
+      Array.isArray(c.sectors) && c.sectors.length ? `Sectors: ${c.sectors.join(", ")}` : "",
+    ].filter(Boolean)
+    const resourceParts = [k.availableResources, k.teamComposition].filter(isDefinedValue)
+    return {
+      title: (title || "").trim(),
+      objective: normalizeOptional(c.mainObjectives) || normalizeOptional(c.projectSummary) || (title || "").trim(),
+      context: contextParts.join("\n"),
+      outcome: normalizeOptional(c.expectedResults) || normalizeOptional(c.proposedSolution) || "",
+      targetDate: normalizeOptional(k.implementationDeadline) || undefined,
+      budget: normalizeOptional(k.availableBudget) || undefined,
+      resources: resourceParts.join("\n") || undefined,
+      tags: [...(Array.isArray(c.sectors) ? c.sectors : []), c.projectMaturity].filter(Boolean),
+    }
+  } catch {
+    return {
+      title: (title || "").trim(),
+      objective: (title || "").trim(),
+      context: "",
+      outcome: "",
+      targetDate: undefined,
+      budget: undefined,
+      resources: undefined,
+      tags: [],
+    }
   }
 }
 
 /** Council brief payload: full structured intake + legacy fields for compatibility. */
 export function buildCouncilBrief(project: Pick<Project, "id" | "title" | "intake"> & Partial<Project>) {
   const intake = project.intake
-  if (!intake) {
+  if (!intake || typeof intake !== "object") {
     return {
       title: project.title,
       objective: project.objective,
@@ -158,13 +171,25 @@ export function buildCouncilBrief(project: Pick<Project, "id" | "title" | "intak
       resources: project.resources,
     }
   }
-  const legacy = intakeToLegacyFields(project.title, intake)
-  return {
-    ...legacy,
-    intake,
-    // explicit "known vs not yet defined" handling for the model
-    knownInformation: collectKnown(intake),
-    unknownOrNotYetDefined: collectUnknown(intake),
+  try {
+    const legacy = intakeToLegacyFields(project.title || "", intake as ProjectIntake)
+    return {
+      ...legacy,
+      intake: intake as ProjectIntake,
+      // explicit "known vs not yet defined" handling for the model
+      knownInformation: collectKnown(intake as ProjectIntake),
+      unknownOrNotYetDefined: collectUnknown(intake as ProjectIntake),
+    }
+  } catch {
+    return {
+      title: project.title,
+      objective: project.objective,
+      context: project.context,
+      outcome: project.outcome,
+      targetDate: project.targetDate,
+      budget: project.budget,
+      resources: project.resources,
+    }
   }
 }
 

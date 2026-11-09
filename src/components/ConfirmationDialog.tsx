@@ -47,7 +47,7 @@ export function ConfirmationDialog({
       >
         <div className="flex items-start justify-between gap-4">
           <span
-            className={`grid size-10 place-items-center rounded-xl ${
+            className={`grid size-10 place-items-center rounded-[3px] ${
               danger ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
             }`}
           >

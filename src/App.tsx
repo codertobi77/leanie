@@ -234,7 +234,7 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
           </nav>
           <button
             onClick={() => enter("overview")}
-            className="rounded-lg bg-[#f8fbff] px-4 py-2.5 text-sm font-semibold text-[#101827] transition hover:bg-blue-50"
+            className="rounded-[3px] bg-[#f8fbff] px-4 py-2.5 text-sm font-semibold text-[#101827] transition hover:bg-blue-50"
           >
             {t("landing.getStarted")}
           </button>
@@ -280,8 +280,8 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
               </p>
             </div>
 
-            <div className="relative mx-auto mt-16 max-w-5xl rounded-[24px] border border-white/10 bg-[#172338] p-2 shadow-[0_40px_100px_rgba(0,0,0,.4)]">
-              <div className="rounded-[18px] border border-white/8 bg-[#111c2d] p-5 sm:p-8">
+            <div className="relative mx-auto mt-16 max-w-5xl rounded-[3px] border border-white/10 bg-[#172338] p-2 shadow-[0_40px_100px_rgba(0,0,0,.4)]">
+              <div className="rounded-[3px] border border-white/8 bg-[#111c2d] p-5 sm:p-8">
                 <div className="flex items-center justify-between border-b border-white/8 pb-5">
                   <div className="text-left">
                     <p className="text-xs text-slate-500">{t("landing.councilSession")}</p>
@@ -296,10 +296,10 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
                   {analysts.map((a, index) => (
                     <div
                       key={a.role}
-                      className="rounded-xl border border-white/8 bg-white/[.035] p-4 text-left"
+                      className="rounded-[3px] border border-white/8 bg-white/[.035] p-4 text-left"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="grid size-8 place-items-center rounded-lg bg-blue-400/10 text-blue-300">
+                        <span className="grid size-8 place-items-center rounded-[3px] bg-blue-400/10 text-blue-300">
                           <BrainCircuit size={15} />
                         </span>
                         <CheckCircle2
@@ -323,8 +323,8 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
                   ))}
                 </div>
                 <div className="mx-auto my-3 h-7 w-px bg-gradient-to-b from-blue-400/50 to-violet-400/50" />
-                <div className="mx-auto flex max-w-lg items-center gap-4 rounded-xl border border-violet-400/20 bg-violet-400/8 p-4 text-left">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-violet-400/15 text-violet-300">
+                <div className="mx-auto flex max-w-lg items-center gap-4 rounded-[3px] border border-violet-400/20 bg-violet-400/8 p-4 text-left">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-[3px] bg-violet-400/15 text-violet-300">
                     <Scale size={18} />
                   </span>
                   <div>
@@ -354,7 +354,7 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
                 translates the strongest reasoning into practical steps.
               </p>
             </div>
-            <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 md:grid-cols-3">
+            <div className="mt-14 grid gap-px overflow-hidden rounded-[3px] border border-slate-200 bg-slate-200 md:grid-cols-3">
               {([
                 [
                   Lightbulb,
@@ -377,7 +377,7 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
               ] as const).map(([Icon, n, title, body]) => (
                 <div key={String(n)} className="bg-white p-7 lg:p-9">
                   <div className="flex items-center justify-between">
-                    <span className="grid size-11 place-items-center rounded-xl bg-[#eef2ff] text-[#526fd2]">
+                    <span className="grid size-11 place-items-center rounded-[3px] bg-[#eef2ff] text-[#526fd2]">
                       <Icon size={20} />
                     </span>
                     <span className="font-mono text-xs text-slate-400">{n}</span>
@@ -441,14 +441,14 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
               ] as const).map(([Icon, title, question, body], i) => (
                 <div
                   key={String(title)}
-                  className={`group grid gap-4 rounded-xl border p-5 sm:grid-cols-[auto_1fr_auto] sm:items-center ${
+                  className={`group grid gap-4 rounded-[3px] border p-5 sm:grid-cols-[auto_1fr_auto] sm:items-center ${
                     i === 3
                       ? "border-violet-400/30 bg-violet-400/10"
                       : "border-white/8 bg-white/[.035]"
                   }`}
                 >
                   <span
-                    className={`grid size-10 place-items-center rounded-lg ${
+                    className={`grid size-10 place-items-center rounded-[3px] ${
                       i === 3
                         ? "bg-violet-400/15 text-violet-300"
                         : "bg-white/5 text-blue-300"
@@ -519,7 +519,7 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
         </section>
 
         <section className="px-5 pb-20 lg:px-8">
-          <div className="landing-cta mx-auto max-w-[1240px] rounded-[24px] border border-[#648bff]/15 bg-[#e9edff] px-6 py-16 text-center sm:px-12 lg:py-20">
+          <div className="landing-cta mx-auto max-w-[1240px] rounded-[3px] border border-[#648bff]/15 bg-[#e9edff] px-6 py-16 text-center sm:px-12 lg:py-20">
             <p className="landing-cta-kicker text-xs font-semibold tracking-[.18em] text-[#526fd2]">
               START WITH BETTER QUESTIONS
             </p>
@@ -1194,11 +1194,11 @@ function DashboardSkeleton() {
       <div className="skeleton mt-3 h-4 w-96 max-w-full" />
       <div className="mt-10 grid gap-4 sm:grid-cols-3">
         {[0, 1, 2].map((item) => (
-          <div key={item} className="skeleton h-20 rounded-xl" />
+          <div key={item} className="skeleton h-20 rounded-[3px]" />
         ))}
       </div>
       <div className="skeleton mt-10 h-5 w-36" />
-      <div className="skeleton mt-4 h-64 rounded-xl" />
+      <div className="skeleton mt-4 h-64 rounded-[3px]" />
       <span className="sr-only">Loading locally saved project information</span>
     </div>
   )
@@ -1632,7 +1632,7 @@ function ProjectForm({
                 <span>03</span>
                 <div><h3>{t("intake.review")}</h3><p>{t("form.reviewDesc")}</p></div>
               </div>
-              <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-700 sm:p-6">
+              <div className="grid gap-3 rounded-[3px] border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-700 sm:p-6">
                 <div><strong>{t("intake.projectTitle")}:</strong> {form.title || t("intake.notYetDefined")}</div>
                 <div><strong>{t("intake.summary")}:</strong> {c.projectSummary || t("intake.notYetDefined")}</div>
                 <div><strong>{t("intake.problem")}:</strong> {c.problemStatement || t("intake.notYetDefined")}</div>
@@ -1909,10 +1909,10 @@ function Results({ project, plan }: { project: Project; plan: () => void }) {
         </ReportSection>
         <ReportSection icon={ShieldAlert} title={t("results.risks")} compact>
           <div className="space-y-3">
-            {project.risks.map((r) => (
+            {(project.risks ?? []).map((r) => (
               <div
                 key={r.title}
-                className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm"
+                className="flex items-center justify-between rounded-[3px] bg-slate-50 p-3 text-sm"
               >
                 <span>{r.title}</span>
                 <span className="status status-amber">
@@ -1920,7 +1920,7 @@ function Results({ project, plan }: { project: Project; plan: () => void }) {
                 </span>
               </div>
             ))}
-            {!project.risks.length && (
+            {!(project.risks ?? []).length && (
               <p className="pt-1 text-xs leading-5 text-slate-500">
                 {t("results.noRisks")}
               </p>
@@ -1928,9 +1928,9 @@ function Results({ project, plan }: { project: Project; plan: () => void }) {
           </div>
         </ReportSection>
       </div>
-      <div className="mt-4 rounded-2xl bg-[#101827] p-6 text-white sm:p-8">
+      <div className="mt-4 rounded-[3px] bg-[#101827] p-6 text-white sm:p-8">
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-violet-400/15 text-violet-300">
+          <span className="grid size-10 place-items-center rounded-[3px] bg-violet-400/15 text-violet-300">
             <Scale size={19} />
           </span>
           <div>
@@ -1981,13 +1981,13 @@ function ReportSection({
 }) {
   return (
     <section
-      className={`mt-4 rounded-2xl border bg-white ${
+      className={`mt-4 rounded-[3px] border bg-white ${
         accent ? "border-violet-200" : "border-slate-200"
       } ${compact ? "p-5 sm:p-6" : "p-6 sm:p-8"}`}
     >
       <div className="flex items-center gap-3">
         <span
-          className={`grid size-9 place-items-center rounded-lg ${
+          className={`grid size-9 place-items-center rounded-[3px] ${
             accent
               ? "bg-violet-50 text-violet-600"
               : "bg-slate-100 text-slate-600"
@@ -2012,7 +2012,7 @@ function Assessment({
   body: string
 }) {
   return (
-    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
+    <div className="mt-4 rounded-[3px] border border-slate-200 bg-white p-5">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold">{title}</h3>
         <span className="status status-blue">{rating}</span>
@@ -2698,7 +2698,7 @@ function PlanScreen({
       </div>
       <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_280px]">
         <div>
-          <section className="rounded-2xl border border-slate-200 bg-white p-6">
+          <section className="rounded-[3px] border border-slate-200 bg-white p-6">
             <p className="block-label">{t("plan.projectOverview")}</p>
             <textarea
               className="editable-overview"
@@ -2724,7 +2724,7 @@ function PlanScreen({
             {project.phases.map((phase, phaseIndex) => (
               <section
                 key={phase.id}
-                className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                className="overflow-hidden rounded-[3px] border border-slate-200 bg-white"
               >
                 <button
                   className="flex w-full items-start gap-4 p-5 text-left sm:p-6"
@@ -2797,7 +2797,7 @@ function PlanScreen({
                           setDraggingTask(null)
                           setDragOverTask(null)
                         }}
-                        className={draggingTask?.phaseId === phase.id && dragOverTask === index ? "ring-2 ring-blue-400 rounded-lg" : ""}
+                        className={draggingTask?.phaseId === phase.id && dragOverTask === index ? "ring-2 ring-blue-400 rounded-[3px]" : ""}
                         update={(data) => updateTask(phase.id, task.id, data)}
                         remove={() => removeTask(phase.id, task.id)}
                         move={(dir) => moveTask(phase.id, index, dir)}
@@ -2810,7 +2810,7 @@ function PlanScreen({
                     ))}
                     <button
                       onClick={() => addTask(phase.id)}
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 py-3 text-xs font-medium text-slate-500 hover:border-blue-300 hover:text-blue-700"
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-[3px] border border-dashed border-slate-300 py-3 text-xs font-medium text-slate-500 hover:border-blue-300 hover:text-blue-700"
                     >
                       <Plus size={14} />
                       {t("plan.addTask")}
@@ -2822,7 +2822,7 @@ function PlanScreen({
           </div>
         </div>
         <aside className="space-y-4">
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <div className="rounded-[3px] border border-amber-200 bg-amber-50 p-5">
             <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
               <Lightbulb size={16} />
               {t("plan.assumptionCheck")}
@@ -2846,7 +2846,7 @@ function PlanScreen({
                </button>
              )}
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="rounded-[3px] border border-slate-200 bg-white p-5">
             <h3 className="text-sm font-semibold">Success criteria</h3>
             <ul className="mt-4 space-y-3 text-xs leading-5 text-slate-600">
               {(project.successCriteria ?? []).map((criterion, index) => (
@@ -2875,14 +2875,14 @@ function PlanScreen({
                 value={newSuccessCriterion}
                 onChange={(event) => setNewSuccessCriterion(event.target.value)}
                 placeholder="Add criterion"
-                className="min-w-[8rem] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs"
+                className="min-w-[8rem] flex-1 rounded-[3px] border border-slate-200 px-3 py-2 text-xs"
               />
               <button type="button" onClick={addSuccessCriterion} className="btn-secondary shrink-0">
                 <Plus size={13} />
               </button>
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="rounded-[3px] border border-slate-200 bg-white p-5">
             <h3 className="text-sm font-semibold">{t("plan.isolatedStep")}</h3>
             <p className="mt-2 text-[11px] leading-5 text-slate-500">
               Re-run only one Council step and patch the completed plan.
@@ -2891,7 +2891,7 @@ function PlanScreen({
               <select
                 value={replayStep}
                 onChange={(event) => setReplayStep(event.target.value)}
-                className="min-w-[10rem] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+                className="min-w-[10rem] flex-1 rounded-[3px] border border-slate-200 bg-white px-3 py-2 text-xs"
                 aria-label="Council step selector"
               >
                 <option value="strategic">Strategic Analyst</option>
@@ -2910,7 +2910,7 @@ function PlanScreen({
               </button>
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="rounded-[3px] border border-slate-200 bg-white p-5">
             <h3 className="text-sm font-semibold">{t("plan.risksMitigation")}</h3>
             <div className="mt-4 space-y-4">
               {project.risks.map((risk, index) => (
@@ -2928,7 +2928,7 @@ function PlanScreen({
                       onChange={(event) =>
                         updateRisk(index, { likelihood: event.target.value as Risk["likelihood"] })
                       }
-                      className="shrink-0 rounded-md border border-slate-200 bg-white text-[10px]"
+                      className="shrink-0 rounded-[3px] border border-slate-200 bg-white text-[10px]"
                     >
                       <option>Low</option>
                       <option>Medium</option>
@@ -2946,7 +2946,7 @@ function PlanScreen({
                   <textarea
                     value={risk.mitigation}
                     onChange={(event) => updateRisk(index, { mitigation: event.target.value })}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-5"
+                    className="w-full rounded-[3px] border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-5"
                     rows={2}
                     aria-label="Mitigation"
                   />
@@ -2958,14 +2958,14 @@ function PlanScreen({
                 value={newRiskTitle}
                 onChange={(event) => setNewRiskTitle(event.target.value)}
                 placeholder="New risk"
-                className="min-w-[8rem] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs"
+                className="min-w-[8rem] flex-1 rounded-[3px] border border-slate-200 px-3 py-2 text-xs"
               />
               <button type="button" onClick={addRisk} className="btn-secondary shrink-0">
                 <Plus size={13} />
               </button>
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="rounded-[3px] border border-slate-200 bg-white p-5">
             <h3 className="text-sm font-semibold">{t("plan.sharingVersions")}</h3>
             <p className="mt-2 text-[11px] leading-5 text-slate-500">
               Share the current plan and restore a previous snapshot.
@@ -3036,7 +3036,7 @@ function PlanScreen({
                     {invites.map((invite) => (
                       <li
                         key={invite.id}
-                        className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600"
+                        className="flex items-center justify-between rounded-[3px] border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600"
                       >
                         <span className="truncate">
                           {invite.invitee_email} · {invite.role} · {invite.status}
@@ -3089,7 +3089,7 @@ function PlanScreen({
                       updateProject(restored)
                       notify("success", "Version restored", version.action)
                     }}
-                    className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-[11px] hover:border-blue-300"
+                    className="block w-full rounded-[3px] border border-slate-200 px-3 py-2 text-left text-[11px] hover:border-blue-300"
                   >
                     {new Date(version.createdAt).toLocaleString()} - {version.action}
                   </button>
@@ -3227,7 +3227,7 @@ function TaskRow({
         </div>
       </div>
       {open && (
-        <div className="ml-6 mt-4 grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
+        <div className="ml-6 mt-4 grid gap-4 rounded-[3px] bg-slate-50 p-4 sm:grid-cols-2">
           <label className="mini-field sm:col-span-2">
             {t("plan.description")}
             <textarea
@@ -3587,7 +3587,7 @@ function SettingsScreen({
                       {sessions.map((session, index) => (
                         <li
                           key={session.token || index}
-                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                          className="flex items-center justify-between rounded-[3px] border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
                         >
                           <span className="truncate">
                             {session.userAgent || "Unknown device"}{" "}
@@ -3837,7 +3837,7 @@ function SubTabs({
           role="tab"
           aria-selected={value === id}
           onClick={() => onChange(id)}
-          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+          className={`flex items-center gap-2 rounded-[3px] border px-3 py-2 text-xs font-semibold transition ${
             value === id
               ? "border-slate-900 bg-slate-900 text-white"
               : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
@@ -4057,12 +4057,12 @@ function MetricsTab({
             value={filters.q}
             onChange={(event) => setFilter("q", event.target.value)}
             placeholder="Search brief, model, error…"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 lg:col-span-2"
+            className="rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 lg:col-span-2"
           />
           <select
             value={filters.provider}
             onChange={(event) => setFilter("provider", event.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+            className="rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
           >
             <option value="">All providers</option>
             {providerOptions.map((provider) => (
@@ -4074,7 +4074,7 @@ function MetricsTab({
           <select
             value={filters.model}
             onChange={(event) => setFilter("model", event.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+            className="rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
           >
             <option value="">All models</option>
             {modelOptions.map((model) => (
@@ -4086,7 +4086,7 @@ function MetricsTab({
           <select
             value={filters.step}
             onChange={(event) => setFilter("step", event.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+            className="rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
           >
             <option value="">All steps</option>
             {["full", "strategic", "feasibility", "critique", "arbiter", "probe"].map((step) => (
@@ -4098,7 +4098,7 @@ function MetricsTab({
           <select
             value={filters.mode}
             onChange={(event) => setFilter("mode", event.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+            className="rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
           >
             <option value="">All modes</option>
             {["live", "error", "demo"].map((mode) => (
@@ -4110,7 +4110,7 @@ function MetricsTab({
           <select
             value={filters.json}
             onChange={(event) => setFilter("json", event.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+            className="rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
           >
             <option value="">Any JSON result</option>
             <option value="valid">JSON valid</option>
@@ -4119,7 +4119,7 @@ function MetricsTab({
           <select
             value={filters.range}
             onChange={(event) => setFilter("range", event.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+            className="rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
           >
             <option value="all">All time</option>
             <option value="24h">Last 24 hours</option>
@@ -4218,7 +4218,7 @@ function MetricsTab({
                   setPageSize(Number(event.target.value))
                   setPage(1)
                 }}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900"
+                className="rounded-[3px] border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900"
               >
                 {[10, 15, 25, 50].map((size) => (
                   <option key={size} value={size}>
@@ -4456,7 +4456,7 @@ function CouncilTab({
           {PIPELINE_FLOW.map((step) => {
             const provider = providers.find((item) => item.id === plan[step].providerId)
             return (
-              <div key={step} className="rounded-lg border border-slate-200 bg-white p-3">
+              <div key={step} className="rounded-[3px] border border-slate-200 bg-white p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                   {COUNCIL_STEP_LABELS[step]}
                 </p>
@@ -4471,7 +4471,7 @@ function CouncilTab({
                       })
                     }
                     disabled={running}
-                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900"
+                    className="w-full rounded-[3px] border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900"
                   >
                     <option value="">Provider…</option>
                     {providers.map((item) => (
@@ -4486,7 +4486,7 @@ function CouncilTab({
                       setPlan({ ...plan, [step]: { ...plan[step], model: event.target.value } })
                     }
                     disabled={running || !plan[step].providerId}
-                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900"
+                    className="w-full rounded-[3px] border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900"
                   >
                     <option value="">Model…</option>
                     {(provider?.models ?? []).map((model) => {
@@ -4515,7 +4515,7 @@ function CouncilTab({
           <select
             value={benchStep}
             onChange={(event) => setBenchStep(event.target.value as typeof benchStep)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+            className="rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
           >
             <option value="full">Full council</option>
             <option value="strategic">Strategic only</option>
@@ -4544,7 +4544,7 @@ function CouncilTab({
             value={configName}
             onChange={(event) => setConfigName(event.target.value)}
             placeholder="Configuration name"
-            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+            className="min-w-0 flex-1 rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
           />
           <div className="flex gap-2">
             <button onClick={saveConfig} className="btn-secondary" disabled={saving}>
@@ -4771,20 +4771,20 @@ function ProvidersTab({
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="Display name (e.g. NVIDIA NIM)"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+            className="rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
           />
           <input
             value={baseUrl}
             onChange={(event) => setBaseUrl(event.target.value)}
             placeholder="Base URL (e.g. https://integrate.api.nvidia.com/v1)"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+            className="rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
           />
           <input
             value={apiKey}
             onChange={(event) => setApiKey(event.target.value)}
             placeholder="API key (nvapi-…)"
             type="password"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 sm:col-span-2"
+            className="rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900 sm:col-span-2"
           />
         </div>
         <button
@@ -4878,7 +4878,7 @@ function ProvidersTab({
                     onChange={(event) =>
                       setTestModels((previous) => ({ ...previous, [provider.id]: event.target.value }))
                     }
-                    className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
+                    className="min-w-0 flex-1 rounded-[3px] border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-900"
                   >
                     <option value="">Choose a model to test…</option>
                     {provider.models.map((model) => {
@@ -4902,7 +4902,7 @@ function ProvidersTab({
               )}
               {testResult && (
                 <div
-                  className={`mt-3 rounded-lg border p-3 text-xs ${
+                  className={`mt-3 rounded-[3px] border p-3 text-xs ${
                     testResult.ok
                       ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                       : "border-red-200 bg-red-50 text-red-700"
@@ -5018,7 +5018,7 @@ function ScoreBar({
 function TestResultView({ result }: { result: any }) {
   const metrics = result?.metrics
   return (
-    <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <div className="mt-5 rounded-[3px] border border-slate-200 bg-slate-50 p-4">
       {result?.mode === "demo" && (
         <p className="text-xs font-medium text-amber-600">
           Demo fallback{result?.error ? ` — ${result.error}` : "."}
@@ -5071,7 +5071,7 @@ function AdminStat({
   small?: boolean
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
+    <div className="rounded-[3px] border border-slate-200 bg-white p-3">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
         {label}
       </p>
