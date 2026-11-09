@@ -8,6 +8,7 @@ import {
   ArrowRight,
   ArrowUp,
   BarChart3,
+  Bell,
   Bot,
   Boxes,
   BrainCircuit,
@@ -42,6 +43,7 @@ import {
   Search,
   Settings,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Sun,
   Target,
@@ -106,7 +108,12 @@ import {
   heartbeatSharePresence,
   loadSharePresence,
 } from "./lib/projectsRepo"
-import { formatDate, formatToday, useLang } from "./lib/i18n"
+import {
+  formatDate,
+  formatToday,
+  useLang,
+  type DictKey,
+} from "./lib/i18n"
 
 const STORAGE_KEY = "leanie-projects-v1"
 const blankForm: ProjectFormData = {
@@ -128,6 +135,36 @@ const navItems: { id: Screen; label: import("./lib/i18n").DictKey; icon: typeof 
 
 function fmtDate(value: string, lang: "en" | "fr" = "en") {
   return formatDate(value, lang)
+}
+
+const statusKey: Record<Project["status"], DictKey> = {
+  Draft: "status.Draft",
+  Analyzing: "status.Analyzing",
+  "Plan ready": "status.Plan ready",
+  Validated: "status.Validated",
+}
+
+const eventKey: Record<Project["status"], DictKey> = {
+  Draft: "topbar.eventBrief",
+  Analyzing: "topbar.eventBrief",
+  "Plan ready": "topbar.eventCouncil",
+  Validated: "topbar.eventValidated",
+}
+
+function projectTaskCount(project: Project) {
+  return project.phases.reduce((total, phase) => total + phase.tasks.length, 0)
+}
+
+function projectProgress(project: Project) {
+  const tasks = project.phases.flatMap((phase) => phase.tasks)
+  if (!tasks.length) return 0
+  const done = tasks.filter((task) => task.completed).length
+  return Math.round((done / tasks.length) * 100)
+}
+
+/** 0 = untouched (accent), 1 = in review (warning), 2 = approved (positive). */
+function reviewState(status: Project["status"]) {
+  return status === "Analyzing" ? 1 : status === "Validated" ? 2 : 0
 }
 
 function StatusPill({ status }: { status: Project["status"] }) {
@@ -299,7 +336,7 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
               to executable direction.
             </h2>
             <p>
-              Leanie introduces productive tension before commitment, then
+              LeanIE Plan introduces productive tension before commitment, then
               translates the strongest reasoning into practical steps.
             </p>
           </div>
@@ -486,7 +523,7 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
         <div className="mx-auto flex max-w-[1240px] flex-col gap-5 px-5 py-8 sm:flex-row sm:items-center sm:justify-between lg:px-8">
           <Brand />
           <p className="text-xs text-slate-500">
-            A product concept by LiteTECH Startup · © 2026
+            {t("landing.footerTagline")}
           </p>
         </div>
       </footer>
@@ -501,7 +538,9 @@ function Sidebar({
   close,
   collapsed,
   toggleCollapsed,
-  openCommand,
+  projects,
+  selectedId,
+  notify,
 }: {
   screen: Screen
   navigate: (s: Screen) => void
@@ -509,9 +548,22 @@ function Sidebar({
   close: () => void
   collapsed: boolean
   toggleCollapsed: () => void
-  openCommand: () => void
+  projects: Project[]
+  selectedId: string
+  notify: (kind: ToastKind, title: string, message?: string) => void
 }) {
   const { t } = useLang()
+  const selected = projects.find((p) => p.id === selectedId)
+  const initials = selected
+    ? selected.title
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((word) => word.charAt(0))
+        .join("")
+        .toUpperCase()
+    : "LP"
+  const storageBytes = new Blob([localStorage.getItem(STORAGE_KEY) ?? ""]).size
+  const storagePct = Math.min(100, Math.round((storageBytes / (5 * 1024 * 1024)) * 100))
   return (
     <>
       {mobileOpen && (
@@ -522,82 +574,129 @@ function Sidebar({
         />
       )}
       <aside
-        className={`app-sidebar fixed inset-y-0 left-0 z-50 flex flex-col bg-[#101827] text-white lg:translate-x-0 ${
+        className={`app-sidebar fixed inset-y-0 left-0 z-50 lg:translate-x-0 ${
           collapsed ? "is-collapsed" : ""
         } ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="flex h-20 items-center justify-between border-b border-white/8 px-5">
+        <div className="sidebar-row">
           <div className="sidebar-brand">
             <Brand light />
           </div>
           <button
             onClick={close}
-            className="text-slate-400 lg:hidden"
+            className="icon-button text-slate-400 lg:hidden"
             aria-label={t("nav.closeMenu")}
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
-        <nav className="flex-1 px-3 py-6">
-          <p className="sidebar-label px-3 pb-3 text-[10px] font-semibold tracking-[.18em] text-slate-600">
-            {t("nav.workspace")}
-          </p>
-          {navItems.map(({ id, label, icon: Icon }) => (
+        {selected && (
+          <button
+            className="project-switcher"
+            onClick={() => {
+              navigate("projects")
+              close()
+            }}
+          >
+            <span className="switcher-icon">{initials}</span>
+            <span className="project-copy">
+              <small>{t("nav.activeProject")}</small>
+              <b>{selected.title}</b>
+            </span>
+            <ChevronRight size={14} />
+          </button>
+        )}
+        <nav className="flex-1 overflow-y-auto">
+          <div className="nav-list">
+            <div className="nav-kicker">{t("nav.workspace")}</div>
             <button
-              key={id}
               onClick={() => {
-                navigate(id)
+                navigate("overview")
                 close()
               }}
-              className={`sidebar-item ${
-                screen === id ||
-                (id === "projects" &&
-                  ["council", "results", "plan"].includes(screen))
-                  ? "sidebar-active"
-                  : ""
-              }`}
+              className={screen === "overview" ? "active" : ""}
             >
-              <Icon size={17} />
-              <span className="sidebar-label">{t(label)}</span>
-              {id === "new" && (
-                <span className="sidebar-label ml-auto rounded bg-blue-400/10 px-1.5 py-0.5 text-[10px] text-blue-300">
-                  {t("nav.newBadge")}
-                </span>
-              )}
+              <LayoutDashboard size={16} />
+              <span className="sidebar-label">{t("nav.overview")}</span>
             </button>
-          ))}
-          <button
-            onClick={openCommand}
-            className="sidebar-item mt-4 border border-white/8"
-          >
-            <Search size={17} />
-            <span className="sidebar-label">{t("nav.quickSearch")}</span>
-            <kbd className="sidebar-label ml-auto rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-slate-500">
-              ⌘K
-            </kbd>
-          </button>
-        </nav>
-        <div className="border-t border-white/8 p-4">
-          <div className="flex items-center gap-3 rounded-xl p-2">
-            <span className="grid size-9 place-items-center rounded-full bg-[#293a56] text-xs font-semibold">
-              LP
-            </span>
-            <div className="sidebar-label min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{t("nav.localPrototype")}</p>
-              <p className="truncate text-xs text-slate-500">
-                {t("nav.localPrototypeDesc")}
-              </p>
-            </div>
-            <MoreHorizontal size={16} className="text-slate-500" />
+            <button
+              onClick={() => {
+                navigate("projects")
+                close()
+              }}
+              className={
+                screen === "projects" ||
+                ["council", "results", "plan"].includes(screen)
+                  ? "active"
+                  : ""
+              }
+            >
+              <FileText size={16} />
+              <span className="sidebar-label">{t("nav.projects")}</span>
+              <em>{projects.length}</em>
+            </button>
+            <button
+              onClick={() => {
+                navigate("new")
+                close()
+              }}
+              className={screen === "new" ? "active" : ""}
+            >
+              <Plus size={16} />
+              <span className="sidebar-label">{t("nav.new")}</span>
+            </button>
           </div>
+          <div className="nav-list nav-section">
+            <div className="nav-kicker">{t("nav.kickerAdmin")}</div>
+            <button
+              onClick={() => {
+                navigate("admin")
+                close()
+              }}
+              className={screen === "admin" ? "active" : ""}
+            >
+              <BarChart3 size={16} />
+              <span className="sidebar-label">{t("nav.admin")}</span>
+            </button>
+          </div>
+        </nav>
+        <div className="sidebar-bottom">
+          <button
+            onClick={() => {
+              navigate("settings")
+              close()
+            }}
+            className={screen === "settings" ? "active" : ""}
+          >
+            <Settings size={16} />
+            <span className="sidebar-label">{t("nav.settings")}</span>
+          </button>
+          <button
+            onClick={() => {
+              notify("info", t("nav.help"), t("dashboard.prototypeNote"))
+              close()
+            }}
+          >
+            <Info size={16} />
+            <span className="sidebar-label">{t("nav.help")}</span>
+          </button>
           <button
             onClick={toggleCollapsed}
             className="sidebar-collapse hidden lg:flex"
             aria-label={collapsed ? t("nav.expand") : t("nav.collapse")}
           >
-            <ChevronRight size={14} className={collapsed ? "" : "rotate-180"} />
+            <ChevronRight size={14} />
             <span className="sidebar-label">{t("nav.collapse")}</span>
           </button>
+          <div className="storage">
+            <div>
+              <span>{t("nav.storage")}</span>
+              <b>{Math.max(1, Math.round(storageBytes / 1024))} KB / 5 MB</b>
+            </div>
+            <div className="storage-track">
+              <i style={{ width: `${storagePct}%` }} />
+            </div>
+          </div>
         </div>
       </aside>
     </>
@@ -607,27 +706,145 @@ function Sidebar({
 function AppHeader({
   title,
   menu,
-  action,
+  projects,
+  navigate,
+  theme,
+  toggleTheme,
+  openCommand,
 }: {
   title: string
   menu: () => void
-  action?: React.ReactNode
+  projects: Project[]
+  navigate: (s: Screen) => void
+  theme: "light" | "dark"
+  toggleTheme: () => void
+  openCommand: () => void
 }) {
+  const { t, lang, setLang } = useLang()
+  const auth = useAuth()
+  const [notifsOpen, setNotifsOpen] = useState(false)
+  const events = projects
+    .slice()
+    .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
+    .slice(0, 3)
+  const initials = auth.user?.name
+    ? auth.user.name
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((word) => word.charAt(0))
+        .join("")
+        .toUpperCase()
+    : (auth.user?.email ?? "LP").slice(0, 2).toUpperCase()
   return (
-    <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-200/80 bg-[#f8f9fc]/90 px-5 backdrop-blur-lg lg:px-9">
-      <div className="flex items-center gap-3">
+    <header className="topbar">
+      <div className="topbar-title">
         <button
+          className="icon-button menu-button"
           onClick={menu}
-          className="icon-button lg:hidden"
-          aria-label="Open navigation"
+          aria-label={t("nav.openNavigation")}
         >
-          <Menu size={20} />
+          <Menu size={18} />
         </button>
-        <h1 className="text-lg font-semibold tracking-[-.025em] text-slate-950">
-          {title}
-        </h1>
+        <div>
+          <button
+            className="topbar-product"
+            onClick={() => navigate("landing")}
+          >
+            {t("nav.product")}
+          </button>
+          <h1>{title}</h1>
+        </div>
       </div>
-      {action}
+      <div className="topbar-actions">
+        {notifsOpen && (
+          <button
+            className="fixed inset-0 z-40"
+            style={{ background: "transparent" }}
+            aria-label={t("topbar.notifications")}
+            onClick={() => setNotifsOpen(false)}
+          />
+        )}
+        <button
+          className="icon-button"
+          onClick={openCommand}
+          aria-label="Open command palette"
+        >
+          <Search size={15} />
+        </button>
+        <button
+          onClick={toggleTheme}
+          className="theme-toggle"
+          aria-label={
+            theme === "dark"
+              ? t("settings.switchToLight")
+              : t("settings.switchToDark")
+          }
+        >
+          <Sun size={13} />
+          <span className={theme === "dark" ? "toggle-on" : ""} />
+          <Moon size={13} />
+        </button>
+        <button
+          className="language-button"
+          onClick={() => setLang(lang === "fr" ? "en" : "fr")}
+          aria-label={t("settings.languageTitle")}
+        >
+          <Languages size={13} />
+          {lang.toUpperCase()}
+        </button>
+        <span className="notification-wrap">
+          <button
+            className="icon-button notification-button"
+            onClick={() => setNotifsOpen((value) => !value)}
+            aria-label={t("topbar.notifications")}
+          >
+            <Bell size={15} />
+            {events.length > 0 && <i />}
+          </button>
+          {notifsOpen && (
+            <div className="notification-popover">
+              <div>
+                <b>{t("topbar.notifications")}</b>
+                <button
+                  onClick={() => setNotifsOpen(false)}
+                  aria-label={t("nav.closeMenu")}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              {events.length > 0 ? (
+                events.map((project) => (
+                  <p key={project.id}>
+                    {project.status === "Validated" ? (
+                      <CheckCircle2 size={14} />
+                    ) : (
+                      <FileText size={14} />
+                    )}
+                    <span>
+                      {t(eventKey[project.status])}
+                      <small>
+                        {project.title} · {fmtDate(project.updatedAt, lang)}
+                      </small>
+                    </span>
+                  </p>
+                ))
+              ) : (
+                <div className="notification-empty">
+                  {t("topbar.noNotifications")}
+                </div>
+              )}
+            </div>
+          )}
+        </span>
+        <button
+          className="avatar-button"
+          onClick={() => navigate("settings")}
+          aria-label={t("nav.settings")}
+        >
+          <span>{initials}</span>
+          <ChevronDown size={12} />
+        </button>
+      </div>
     </header>
   )
 }
@@ -642,171 +859,310 @@ function Dashboard({
   select: (p: Project) => void
 }) {
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<"all" | "ready" | "validated">("all")
   useEffect(() => {
     const timer = window.setTimeout(() => setLoading(false), 320)
     return () => clearTimeout(timer)
   }, [])
-  const recent = projects
-    .slice()
-    .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
-    .slice(0, 4)
   const { t, lang } = useLang()
   if (loading) return <DashboardSkeleton />
+  const sorted = projects
+    .slice()
+    .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
+  const focus =
+    sorted.find(
+      (p) => p.status === "Analyzing" || p.status === "Plan ready",
+    ) ?? sorted[0]
+  const queue = sorted.filter((p) => p.status === "Plan ready").slice(0, 3)
+  const filtered =
+    filter === "all"
+      ? sorted
+      : sorted.filter((p) =>
+          filter === "ready"
+            ? p.status === "Plan ready"
+            : p.status === "Validated",
+        )
+  const totalTasks = projects.reduce((sum, p) => sum + projectTaskCount(p), 0)
+  const totalRisks = projects.reduce((sum, p) => sum + p.risks.length, 0)
+  const averageProgress = projects.length
+    ? Math.round(
+        projects.reduce((sum, p) => sum + projectProgress(p), 0) /
+          projects.length,
+      )
+    : 0
+  const metrics = [
+    {
+      label: t("dashboard.totalProjects"),
+      value: projects.length,
+      small: `${totalTasks} ${t("dashboard.tasksCount")}`,
+    },
+    {
+      label: t("dashboard.plansReady"),
+      value: projects.filter((p) => p.status === "Plan ready").length,
+      small: t("dashboard.queueTitle"),
+    },
+    {
+      label: t("dashboard.validated"),
+      value: projects.filter((p) => p.status === "Validated").length,
+      small: `${averageProgress}% ${t("dashboard.progressLabel")}`,
+    },
+    {
+      label: t("dashboard.inAnalysis"),
+      value: projects.filter((p) => p.status === "Analyzing").length,
+      small: t("landing.aiCouncil"),
+    },
+  ]
   return (
     <div className="page">
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+      <div className="welcome-row">
         <div>
-          <p className="text-sm text-slate-500">{formatToday(lang)}</p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-[-.04em] text-slate-950 sm:text-4xl">
-            {t("dashboard.greeting")}
-          </h2>
-          <p className="mt-3 text-slate-600">{t("dashboard.tagline")}</p>
-        </div>
-        <button onClick={() => navigate("new")} className="btn-primary">
-          <Plus size={16} />
-          {t("dashboard.createProject")}
-        </button>
-      </div>
-      <div className="mt-10 grid gap-4 sm:grid-cols-3">
-        <div className="metric-card">
-          <FileText size={18} />
-          <div>
-            <span>
-              <AnimatedNumber value={projects.length} />
-            </span>
-            <p>{t("dashboard.totalProjects")}</p>
-          </div>
-        </div>
-        <div className="metric-card">
-          <ListChecks size={18} />
-          <div>
-            <span>
-              <AnimatedNumber
-                value={projects.filter((p) => p.status === "Plan ready").length}
-              />
-            </span>
-            <p>{t("dashboard.plansReady")}</p>
-          </div>
-        </div>
-        <div className="metric-card">
-          <CheckCircle2 size={18} />
-          <div>
-            <span>
-              <AnimatedNumber
-                value={projects.filter((p) => p.status === "Validated").length}
-              />
-            </span>
-            <p>{t("dashboard.validated")}</p>
-          </div>
-        </div>
-      </div>
-      <div className="mt-10 flex items-center justify-between">
-        <div>
-          <h3 className="font-semibold text-slate-950">{t("dashboard.recentProjects")}</h3>
-          <p className="mt-1 text-sm text-slate-500">
-            {t("dashboard.recentSub")}
+          <p className="page-kicker">
+            <i className="desk-live-dot" />
+            {t("dashboard.eyebrow")}
           </p>
+          <h2>{t("dashboard.greeting")}</h2>
+          <p className="welcome-copy">{t("dashboard.tagline")}</p>
         </div>
-        <button onClick={() => navigate("projects")} className="text-button">
-          {t("dashboard.viewAll")} <ArrowRight size={14} />
-        </button>
+        <div className="desk-header-actions">
+          <span>{formatToday(lang)}</span>
+          <button onClick={() => navigate("new")} className="btn-primary">
+            <Plus size={14} />
+            {t("dashboard.createProject")}
+          </button>
+        </div>
       </div>
-      {recent.length ? (
-        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
-          {recent.map((p, i) => (
+
+      <div className="metrics-grid">
+        {metrics.map((metric) => (
+          <div key={metric.label} className="metric-cell">
+            <span>{metric.label}</span>
+            <strong>
+              <AnimatedNumber value={metric.value} />
+            </strong>
+            <small>{metric.small}</small>
+          </div>
+        ))}
+      </div>
+
+      <div className="desk-focus-layout">
+        {focus && (
+          <section className="focus-review">
+            <div className="section-rule">
+              <span>01 — {t("dashboard.continueLabel")}</span>
+              <span>{focus.id.slice(0, 6).toUpperCase()}</span>
+            </div>
+            <div className="focus-project">
+              <div className="focus-project-meta">
+                <span>
+                  {focus.targetDate
+                    ? `${t("dashboard.targetLabel")} · ${fmtDate(
+                        focus.targetDate,
+                        lang,
+                      )}`
+                    : t("dashboard.noTarget")}
+                </span>
+                <StatusPill status={focus.status} />
+              </div>
+              <h3>{focus.title}</h3>
+              <p>{focus.objective}</p>
+              <div className="document-comparison">
+                <div className="source-paper">
+                  <div className="source-paper-header">
+                    <FileText size={11} />
+                    <span>{t("dashboard.paperBrief")}</span>
+                    <small>{fmtDate(focus.createdAt, lang)}</small>
+                  </div>
+                  <p className="paper-kicker">{t("dashboard.tasksCount")}</p>
+                  <div className="source-number">
+                    {projectTaskCount(focus)}
+                    <span>{t("dashboard.taskLabel")}</span>
+                  </div>
+                  <p className="source-excerpt">{focus.outcome}</p>
+                  <div className="paper-lines">
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                </div>
+                <div className="source-paper">
+                  <div className="source-paper-header">
+                    <Scale size={11} />
+                    <span>{t("dashboard.paperCouncil")}</span>
+                    <small>{fmtDate(focus.updatedAt, lang)}</small>
+                  </div>
+                  <p className="paper-kicker">{t("dashboard.risksCount")}</p>
+                  <div
+                    className={`source-number ${
+                      focus.risks.length > 0 ? "discrepant" : ""
+                    }`}
+                  >
+                    {focus.risks.length}
+                    <span>{t("dashboard.risksCount")}</span>
+                  </div>
+                  <p className="source-excerpt">
+                    {focus.risks[0]?.title ?? focus.objective}
+                  </p>
+                  <div className="paper-lines">
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                </div>
+                {focus.risks.length > 0 && (
+                  <span className="comparison-link">≠</span>
+                )}
+              </div>
+              <div className="focus-footer">
+                <span>
+                  <i className="reviewer-initials">LP</i>
+                  {t("dashboard.continueLabel")}
+                </span>
+                <button onClick={() => select(focus)}>
+                  {t("dashboard.continueLabel")} <ArrowRight size={13} />
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+        <section className="decision-queue">
+          <div className="section-rule">
+            <span>02 — {t("dashboard.queueTitle")}</span>
+            <span>0{queue.length}</span>
+          </div>
+          <p className="queue-intro">{t("dashboard.queueIntro")}</p>
+          {queue.map((project) => (
             <button
-              key={p.id}
-              onClick={() => select(p)}
-              className={`project-row ${i ? "border-t border-slate-100" : ""}`}
+              key={project.id}
+              className="queue-item"
+              onClick={() => select(project)}
             >
-              <span className="project-icon">
-                <FileText size={17} />
-              </span>
-              <span className="min-w-0 flex-1 text-left">
-                <span className="block truncate text-sm font-medium text-slate-900">
-                  {p.title}
+              <div>
+                <i
+                  className={`queue-status ${
+                    project.risks.length > 1 ? "queue-status-high" : ""
+                  }`}
+                />
+                <span>{t(statusKey[project.status])}</span>
+                <span className="mono">
+                  {project.risks.length} {t("dashboard.risksCount")}
                 </span>
-                <span className="mt-1 block text-xs text-slate-500">
-                  Updated {fmtDate(p.updatedAt)}
-                </span>
-              </span>
-              <StatusPill status={p.status} />
-              <ChevronRight size={16} className="text-slate-400" />
+              </div>
+              <h4>{project.title}</h4>
+              <p>{project.objective}</p>
+              <ArrowRight size={13} />
+            </button>
+          ))}
+          {!queue.length && (
+            <p className="queue-intro">{t("dashboard.queueEmpty")}</p>
+          )}
+          <button className="queue-all" onClick={() => navigate("projects")}>
+            {t("dashboard.viewAll")} <ArrowRight size={12} />
+          </button>
+        </section>
+      </div>
+
+      <section className="review-register">
+        <div className="register-heading">
+          <div>
+            <h3>{t("dashboard.recentProjects")}</h3>
+            <span>
+              {filtered.length} / {projects.length}
+            </span>
+          </div>
+          <button className="text-button" onClick={() => navigate("projects")}>
+            {t("dashboard.viewAll")} <ArrowRight size={13} />
+          </button>
+        </div>
+        <div className="register-tabs">
+          {(
+            [
+              {
+                id: "all",
+                label: t("dashboard.filterAll"),
+                count: projects.length,
+              },
+              {
+                id: "ready",
+                label: t("dashboard.filterReady"),
+                count: projects.filter((p) => p.status === "Plan ready")
+                  .length,
+              },
+              {
+                id: "validated",
+                label: t("dashboard.filterValidated"),
+                count: projects.filter((p) => p.status === "Validated").length,
+              },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              className={filter === item.id ? "active" : ""}
+              onClick={() => setFilter(item.id)}
+            >
+              {item.label} <span>{item.count}</span>
             </button>
           ))}
         </div>
-      ) : (
-        <EmptyState navigate={navigate} />
-      )}
-      <div className="mt-8 grid gap-4 lg:grid-cols-[1fr_.72fr]">
-        <section className="dashboard-panel">
-          <div className="panel-heading">
-            <div>
-              <h3>Recent activity</h3>
-              <p>Sample and locally generated project events.</p>
-            </div>
-            <Clock3 size={17} />
-          </div>
-          <div className="activity-timeline">
-            {recent.slice(0, 3).map((project, index) => (
-              <button key={project.id} onClick={() => select(project)}>
-                <span
-                  className={`activity-dot ${index === 0 ? "active" : ""}`}
-                />
-                <div>
-                  <strong>
-                    {project.status === "Validated"
-                      ? "Plan validated"
-                      : project.status === "Plan ready"
-                        ? "Council analysis completed"
-                        : "Project brief updated"}
-                  </strong>
-                  <p>{project.title}</p>
-                </div>
-                <time>{fmtDate(project.updatedAt)}</time>
-              </button>
-            ))}
-          </div>
-        </section>
-        <section className="dashboard-panel">
-          <div className="panel-heading">
-            <div>
-              <h3>Quick actions</h3>
-              <p>Continue your next decision.</p>
-            </div>
-            <Zap size={17} />
-          </div>
-          <div className="quick-actions">
-            <button onClick={() => navigate("new")}>
-              <span>
-                <Plus size={16} />
+        <div className="register-table-head">
+          <span>{t("table.project")}</span>
+          <span>{t("table.status")}</span>
+          <span>{t("table.tasks")}</span>
+          <span>{t("dashboard.progressLabel")}</span>
+          <span>{t("table.updated")}</span>
+          <span />
+        </div>
+        {filtered.length ? (
+          filtered.map((project) => (
+            <button
+              key={project.id}
+              className="register-row"
+              onClick={() => select(project)}
+            >
+              <span className="register-project">
+                <span className="register-project-id">
+                  {project.id.slice(0, 4).toUpperCase()}
+                </span>
+                <span>
+                  <b>{project.title}</b>
+                  <small>
+                    {t(statusKey[project.status])} · {project.risks.length}{" "}
+                    {t("dashboard.risksCount")}
+                  </small>
+                </span>
               </span>
-              <div>
-                <strong>New Council session</strong>
-                <p>Challenge a project idea</p>
-              </div>
-              <ChevronRight size={15} />
-            </button>
-            <button onClick={() => navigate("projects")}>
-              <span>
-                <FileText size={16} />
+              <span
+                className={`register-state register-state-${reviewState(
+                  project.status,
+                )}`}
+              >
+                <i />
+                {t(statusKey[project.status])}
               </span>
-              <div>
-                <strong>Browse projects</strong>
-                <p>Review plans and analyses</p>
-              </div>
-              <ChevronRight size={15} />
+              <span className="register-count">
+                {projectTaskCount(project)}
+                <small>{t("dashboard.taskLabel")}</small>
+              </span>
+              <span className="register-coverage">
+                <span>
+                  <i style={{ width: `${projectProgress(project)}%` }} />
+                </span>
+                <b>{projectProgress(project)}%</b>
+              </span>
+              <time>{fmtDate(project.updatedAt, lang)}</time>
+              <ChevronRight size={14} />
             </button>
-          </div>
-        </section>
-      </div>
-      <div className="mt-8 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-        <Info size={17} className="mt-0.5 shrink-0 text-blue-600" />
-        <p className="text-xs leading-5 text-blue-900">
-          <strong>Prototype mode.</strong> Council responses are deterministic
-          demonstration content, not live AI inference. Projects are stored only
-          in this browser.
-        </p>
+          ))
+        ) : (
+          <p className="queue-intro">{t("dashboard.queueEmpty")}</p>
+        )}
+      </section>
+
+      <div className="desk-footer">
+        <span>
+          <ShieldCheck size={12} />
+          {t("dashboard.prototypeNote")}
+        </span>
+        <span className="mono">{t("dashboard.footerNote")}</span>
       </div>
     </div>
   )
@@ -831,48 +1187,39 @@ function DashboardSkeleton() {
 }
 
 function EmptyState({ navigate }: { navigate: (s: Screen) => void }) {
+  const { t } = useLang()
   return (
-    <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-      <span className="mx-auto grid size-12 place-items-center rounded-xl bg-slate-100 text-slate-500">
-        <Lightbulb size={21} />
+    <div className="empty-state">
+      <span>
+        <Lightbulb size={19} />
       </span>
-      <h3 className="mt-5 font-semibold">Start with an open question</h3>
-      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
-        Describe an idea, decision, or project. The Council will help you test
-        it before you commit.
-      </p>
-      <button onClick={() => navigate("new")} className="btn-primary mt-6">
-        <Plus size={16} />
-        Create your first project
+      <h3>{t("empty.title")}</h3>
+      <p>{t("empty.body")}</p>
+      <button onClick={() => navigate("new")} className="btn-primary mt-4">
+        <Plus size={14} />
+        {t("empty.cta")}
       </button>
     </div>
   )
 }
 
 function MissingProject({ navigate }: { navigate: (screen: Screen) => void }) {
+  const { t } = useLang()
   return (
     <div className="page">
-      <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-        <span className="mx-auto grid size-12 place-items-center rounded-xl bg-slate-100 text-slate-500">
-          <AlertCircle size={21} />
+      <div className="empty-state">
+        <span>
+          <AlertCircle size={19} />
         </span>
-        <h2 className="mt-5 font-semibold">
-          Project information is unavailable
-        </h2>
-        <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
-          This project may have been removed from local storage. Return to the
-          project library or begin a new Council session.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <button
-            onClick={() => navigate("projects")}
-            className="btn-secondary"
-          >
-            Browse projects
+        <h3>{t("missing.title")}</h3>
+        <p>{t("missing.body")}</p>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <button onClick={() => navigate("projects")} className="btn-secondary">
+            {t("missing.browse")}
           </button>
           <button onClick={() => navigate("new")} className="btn-primary">
-            <Plus size={15} />
-            New project
+            <Plus size={14} />
+            {t("nav.new")}
           </button>
         </div>
       </div>
@@ -926,16 +1273,19 @@ function ProjectsScreen({
   }, [projects, query, status, sort, tag])
   return (
     <div className="page">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="page-kicker">{t("projects.kicker")}</p>
-          <h2 className="page-title">{t("projects.title")}</h2>
-          <p className="page-subtitle">
-            {t("projects.title")} ({projects.length}) · {filtered.length}{" "}
-            {t("projects.shown")}
-          </p>
+      <p className="page-kicker">{t("projects.kicker")}</p>
+      <h2 className="page-title">{t("projects.title")}</h2>
+      <div className="toolbar">
+        <div className="search-field">
+          <Search size={14} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("projects.searchPlaceholder")}
+            aria-label={t("projects.searchLabel")}
+          />
         </div>
-        <div className="flex gap-2">
+        <div className="control-group">
           <input
             ref={importRef}
             type="file"
@@ -947,103 +1297,124 @@ function ProjectsScreen({
               event.target.value = ""
             }}
           />
-          <button onClick={() => importRef.current?.click()} className="btn-secondary">
-            <Download size={16} />
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+            className="control"
+            aria-label={t("projects.filterStatus")}
+          >
+            <option value="all">{t("projects.allStatuses")}</option>
+            {(["Draft", "Analyzing", "Plan ready", "Validated"] as const).map((s) => (
+              <option key={s} value={s}>
+                {t(`status.${s}` as DictKey)}
+              </option>
+            ))}
+          </select>
+          <select
+            value={sort}
+            onChange={(event) => setSort(event.target.value)}
+            className="control"
+            aria-label={t("projects.sortLabel")}
+          >
+            <option value="updated-desc">{t("projects.sortNewest")}</option>
+            <option value="updated-asc">{t("projects.sortOldest")}</option>
+            <option value="title">{t("projects.sortTitle")}</option>
+            <option value="status">{t("projects.sortStatus")}</option>
+          </select>
+          <input
+            value={tag}
+            onChange={(event) => setTag(event.target.value)}
+            placeholder={t("projects.tagFilter")}
+            aria-label={t("projects.filterTag")}
+            className="control"
+            style={{ width: 120 }}
+          />
+          <button
+            onClick={() => importRef.current?.click()}
+            className="control"
+          >
+            <Download size={13} />
             {t("projects.import")}
           </button>
           <button onClick={() => navigate("new")} className="btn-primary">
-            <Plus size={16} />
+            <Plus size={14} />
             {t("projects.newProject")}
           </button>
         </div>
       </div>
-      <div className="mt-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-600 md:grid-cols-[1fr_auto_auto_auto]">
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t("projects.searchPlaceholder")}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-          aria-label={t("projects.searchLabel")}
-        />
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-          aria-label={t("projects.filterStatus")}
-        >
-          <option value="all">{t("projects.allStatuses")}</option>
-          {(["Draft", "Analyzing", "Plan ready", "Validated"] as const).map((s) => (
-            <option key={s} value={s}>
-              {t(`status.${s}` as import("./lib/i18n").DictKey)}
-            </option>
-          ))}
-        </select>
-        <select
-          value={sort}
-          onChange={(event) => setSort(event.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-          aria-label={t("projects.sortLabel")}
-        >
-          <option value="updated-desc">{t("projects.sortNewest")}</option>
-          <option value="updated-asc">{t("projects.sortOldest")}</option>
-          <option value="title">{t("projects.sortTitle")}</option>
-          <option value="status">{t("projects.sortStatus")}</option>
-        </select>
-        <input
-          value={tag}
-          onChange={(event) => setTag(event.target.value)}
-          placeholder={t("projects.tagFilter")}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-          aria-label={t("projects.filterTag")}
-        />
-      </div>
-      <div className="mt-9 grid gap-4 lg:grid-cols-2">
-        {filtered.map((p) => (
-          <article
-            key={p.id}
-            className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 hover:shadow-lg hover:shadow-slate-200/40"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <span className="project-icon">
-                <FileText size={17} />
-              </span>
-              <StatusPill status={p.status} />
+      {projects.length ? (
+        <div className="panel table-panel">
+          <div className="data-table">
+            <div className="table-head">
+              <span>{t("table.project")}</span>
+              <span>{t("table.status")}</span>
+              <span>{t("table.tasks")}</span>
+              <span>{t("table.updated")}</span>
+              <span />
             </div>
-            <button
-              onClick={() => open(p)}
-              className="mt-6 block w-full text-left"
-            >
-              <h3 className="text-lg font-semibold tracking-[-.025em] text-slate-950 group-hover:text-blue-700">
-                {p.title}
-              </h3>
-              <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">
-                {p.objective}
-              </p>
-            </button>
-            <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
-              <span className="text-xs text-slate-500">
-                {t("projects.updated")} {fmtDate(p.updatedAt, lang)}
-              </span>
-              <div className="flex gap-1">
+            {filtered.map((p) => (
+              <div
+                key={p.id}
+                className="table-row"
+                onClick={() => open(p)}
+                role="row"
+              >
                 <button
-                  onClick={() => remove(p)}
-                  className="icon-button hover:text-red-600"
-                  aria-label={`${t("common.delete")} ${p.title}`}
-                >
-                  <Trash2 size={15} />
-                </button>
-                <button
-                  onClick={() => open(p)}
-                  className="icon-button"
+                  className="table-project"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    open(p)
+                  }}
                   aria-label={`${t("common.open")} ${p.title}`}
                 >
-                  <ArrowRight size={15} />
+                  <i>
+                    <FileText size={15} />
+                  </i>
+                  <b>{p.title}</b>
+                  <small>
+                    {t(statusKey[p.status])} · {p.phases.length} ×{" "}
+                    {t("dashboard.taskLabel")} — {p.objective}
+                  </small>
                 </button>
+                <span className={`review-state review-state-${reviewState(p.status)}`}>
+                  {t(statusKey[p.status])}
+                </span>
+                <span className="table-meta">{projectTaskCount(p)}</span>
+                <time className="table-cell-muted">
+                  {fmtDate(p.updatedAt, lang)}
+                </time>
+                <span className="flex justify-end gap-1">
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      remove(p)
+                    }}
+                    className="icon-button"
+                    aria-label={`${t("common.delete")} ${p.title}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      open(p)
+                    }}
+                    className="icon-button"
+                    aria-label={`${t("common.open")} ${p.title}`}
+                  >
+                    <ArrowRight size={14} />
+                  </button>
+                </span>
               </div>
-            </div>
-          </article>
-        ))}
-      </div>
+            ))}
+            {!filtered.length && (
+              <p className="page-subtitle">{t("dashboard.queueEmpty")}</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <EmptyState navigate={navigate} />
+      )}
     </div>
   )
 }
@@ -1342,6 +1713,7 @@ function CouncilScreen({
   const [stage, setStage] = useState<CouncilStage>(0)
   const [paused, setPaused] = useState(false)
   const [failed, setFailed] = useState(false)
+  const { t } = useLang()
   const auth = useAuth()
   const [result, setResult] = useState<any>(null)
   const completeRef = useRef(complete)
@@ -1414,81 +1786,95 @@ function CouncilScreen({
     setStage(0)
   }
   return (
-    <div className="min-h-[calc(100vh-5rem)] bg-[#101827] px-4 py-8 text-white sm:px-6 lg:px-10 lg:py-10">
-      <div className="mx-auto max-w-6xl page-enter">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-blue-300">
-              <span
-                className={
-                  paused ? "size-2 rounded-full bg-amber-400" : "pulse-dot"
-                }
-              />
-              {paused ? "SIMULATION PAUSED" : "COUNCIL SIMULATION ACTIVE"}
-            </div>
-            <h2 className="mt-4 text-3xl font-medium tracking-[-.04em]">
-              {project.title}
-            </h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Three independent perspectives analyze in parallel before
-              converging on the Arbiter.
-            </p>
-          </div>
-          <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-400">
-            Deterministic demo · no live AI
-          </span>
+    <div className="page page-enter">
+      <div className="panel progress-card">
+        <p className="page-kicker">
+          {paused ? t("council.paused") : failed ? t("council.errorTitle") : t("council.active")}
+        </p>
+        <div className="analysis-orbit">
+          <Sparkles size={22} />
         </div>
-        <div className="mt-7 rounded-xl border border-white/8 bg-white/[.025] p-4">
-          <div className="flex items-center justify-between gap-4 text-xs">
-            <span className="text-blue-200">
-              Stage {stage + 1} of 5 · {stages[stage]}
-            </span>
-            <span className="text-slate-500">{(stage + 1) * 20}%</span>
-          </div>
-          <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/5">
-            <div
-              className="council-progress"
-              style={{ width: `${(stage + 1) * 20}%` }}
-            />
-          </div>
-        </div>
-        <div className="mt-5">
-          <CouncilDiagram
-            project={project}
-            stage={stage}
-            paused={paused}
-            onPause={() => setPaused((value) => !value)}
-            onReplay={replay}
-          />
-        </div>
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-slate-500">
-          <Info size={13} />
+        <h3>{project.title}</h3>
+        <p>{t("council.subtitle")}</p>
+        <div className="big-progress">
           <span>
-            Animation timing is driven by the simulated Council stage.
+            <i style={{ width: `${(stage + 1) * 20}%` }} />
           </span>
-          {!failed && (
-            <button
-              className="text-slate-400 underline decoration-slate-700 underline-offset-4 hover:text-slate-200"
-              onClick={() => setFailed(true)}
-            >
-              Preview error state
-            </button>
-          )}
+          <b>{(stage + 1) * 20}%</b>
         </div>
-        {failed && (
-          <div className="error-state mt-5">
-            <AlertCircle size={18} />
-            <div>
-              <strong>Analysis simulation interrupted</strong>
+        <div className="stage-list">
+          {stages.map((label, index) => (
+            <div
+              key={label}
+              className={
+                index === stage ? "current" : index < stage ? "complete" : ""
+              }
+            >
+              <span>
+                {index < stage ? <Check size={12} /> : `0${index + 1}`}
+              </span>
               <p>
-                No project data was lost. Retry to restart the state-driven
-                sequence.
+                <b>{label}</b>
+                {index === stage && (
+                  <em>
+                    {failed
+                      ? t("council.retry")
+                      : paused
+                        ? t("council.paused")
+                        : t("council.processing")}
+                  </em>
+                )}
+                {index === stage && (
+                  <small>
+                    {t("council.stageOf")
+                      .replace("{n}", String(stage + 1))
+                      .replace("{stage}", stages[stage])}
+                  </small>
+                )}
               </p>
             </div>
-            <button onClick={replay}>Retry analysis</button>
-          </div>
+          ))}
+        </div>
+        <div className="mock-banner">
+          <i className="pulse-dot" />
+          {t("council.demoNotice")}
+        </div>
+      </div>
+      <div className="mt-5">
+        <CouncilDiagram
+          project={project}
+          stage={stage}
+          paused={paused}
+          onPause={() => setPaused((value) => !value)}
+          onReplay={replay}
+        />
+      </div>
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-slate-500">
+        <Info size={13} />
+        <span>
+          {t("council.timingNote")}
+        </span>
+        {!failed && (
+          <button
+            className="text-slate-400 underline decoration-slate-700 underline-offset-4 hover:text-slate-200"
+            onClick={() => setFailed(true)}
+          >
+            {t("council.errorPreview")}
+          </button>
         )}
       </div>
+      {failed && (
+        <div className="error-state mt-5">
+          <AlertCircle size={18} />
+          <div>
+            <strong>{t("council.errorTitle")}</strong>
+            <p>
+              {t("council.errorBody")}
+            </p>
+          </div>
+          <button onClick={replay}>{t("council.retry")}</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -2187,7 +2573,7 @@ function PlanScreen({
 </head>
 <body>
   <section class="cover">
-    <div class="brand">Leanie · Lean Intelligence Engine</div>
+    <div class="brand">LeanIE Plan · Lean Intelligence Engine</div>
     <h1>${escapeHtml(project.title)}</h1>
     <p class="meta">Plan export generated ${escapeHtml(fmtDate(new Date().toISOString()))}</p>
     <div class="meta-grid">
@@ -2235,7 +2621,7 @@ function PlanScreen({
   <ul>${(project.successCriteria ?? []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
   <h2>Key assumptions</h2>
   <ul>${(project.assumptions ?? []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
-  <footer>Generated by Leanie · ${escapeHtml(fmtDate(new Date().toISOString()))}</footer>
+  <footer>Generated by LeanIE Plan — LeanIE suite · LiteTECH Solutions · ${escapeHtml(fmtDate(new Date().toISOString()))}</footer>
 </body>
 </html>`
     console.log("printPlan opened")
@@ -3041,21 +3427,34 @@ function SettingsScreen({
     setAuthMessage("Signed out.")
   }
   return (
-    <div className="page max-w-4xl">
+    <div className="page">
       <p className="page-kicker">{t("settings.kicker")}</p>
       <h2 className="page-title">{t("settings.title")}</h2>
-      <p className="page-subtitle">
-        {t("settings.subtitle")}
-      </p>
+      <p className="page-subtitle">{t("settings.subtitle")}</p>
 
-      <SubTabs
-        tabs={settingsTabs.map((tab) => ({ ...tab, label: t(tab.label) }))}
-        value={tab}
-        onChange={(id) => setTab(id as SettingsTab)}
-      />
-
-      <div className="mt-9 space-y-4">
-        {tab === "appearance" && (
+      <div className="settings-layout">
+        <nav className="settings-nav">
+          {settingsTabs.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              className={tab === id ? "active" : ""}
+              onClick={() => setTab(id)}
+            >
+              <Icon size={15} />
+              <span>{t(label)}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="panel settings-card">
+          <h3>
+            {t(
+              settingsTabs.find((item) => item.id === tab)?.label ??
+                "settings.title",
+            )}
+          </h3>
+          <p>{t("settings.preferencesBody")}</p>
+          <div>
+          {tab === "appearance" && (
           <>
             <Setting
               icon={Sun}
@@ -3081,15 +3480,19 @@ function SettingsScreen({
               title={t("settings.languageTitle")}
               description={t("settings.languageDesc")}
             >
-              <select
-                className="settings-select"
-                value={lang}
-                onChange={(event) => setLang(event.target.value as "en" | "fr")}
-                aria-label={t("settings.languageTitle")}
-              >
-                <option value="en">{t("settings.english")}</option>
-                <option value="fr">{t("settings.french")}</option>
-              </select>
+              <div className="segmented">
+                {(["en", "fr"] as const).map((langOption) => (
+                  <button
+                    key={langOption}
+                    onClick={() => setLang(langOption)}
+                    className={lang === langOption ? "selected" : ""}
+                  >
+                    {langOption === "en"
+                      ? t("settings.english")
+                      : t("settings.french")}
+                  </button>
+                ))}
+              </div>
             </Setting>
           </>
         )}
@@ -3298,7 +3701,7 @@ function SettingsScreen({
                   </button>
                 </Setting>
 
-                <div className="flex flex-wrap items-center gap-3 pt-2">
+                <div className="settings-actions">
                   <button onClick={signOut} className="btn-secondary">
                     Sign out
                   </button>
@@ -3388,12 +3791,14 @@ function SettingsScreen({
             <Setting
               icon={Info}
               title="Application"
-              description="Leanie — Lean Intelligence Engine. Early-stage frontend prototype by LiteTECH Startup."
+              description="LeanIE Plan — part of the LeanIE suite (Lean Intelligence Engine) by LiteTECH Solutions. Early-stage frontend prototype."
             >
               <span className="text-xs text-slate-400">Version 0.1</span>
             </Setting>
           </>
         )}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -3411,13 +3816,13 @@ function Setting({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center">
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600">
-        <Icon size={18} />
-      </span>
-      <div className="flex-1">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
+    <div className="setting-row">
+      <div>
+        <b className="flex items-center gap-2">
+          <Icon size={14} />
+          {title}
+        </b>
+        <span>{description}</span>
       </div>
       {children}
     </div>
@@ -5157,9 +5562,7 @@ export default function App() {
               ? t("nav.admin")
               : (selected?.title ?? "Project")
   return (
-    <div
-      className={`app-shell min-h-screen bg-[#f8f9fc] text-[#101827] theme-${theme}`}
-    >
+    <div className={`app-shell theme-${theme}`}>
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
@@ -5170,45 +5573,21 @@ export default function App() {
         close={() => setMobileOpen(false)}
         collapsed={collapsed}
         toggleCollapsed={() => setCollapsed((value) => !value)}
-        openCommand={() => setCommandOpen(true)}
+        projects={projects}
+        selectedId={selectedId}
+        notify={notify}
       />
       <main id="main-content" className={`app-main ${collapsed ? "sidebar-collapsed" : ""}`}>
         <AppHeader
           title={title}
           menu={() => setMobileOpen(true)}
-          action={
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCommandOpen(true)}
-                className="header-command"
-                aria-label="Open command palette"
-              >
-                <Search size={14} />
-                <span>Search</span>
-                <kbd>
-                  <Command size={10} />K
-                </kbd>
-              </button>
-              <button
-                onClick={() =>
-                  setTheme((value) => (value === "dark" ? "light" : "dark"))
-                }
-                className="icon-button"
-                aria-label={
-                  theme === "dark" ? t("settings.switchToLight") : t("settings.switchToDark")
-                }
-              >
-                {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
-              </button>
-              <button
-                onClick={() => navigate("landing")}
-                className="hidden items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-900 xl:flex"
-              >
-                <Home size={14} />
-                {t("nav.productSite")}
-              </button>
-            </div>
+          projects={projects}
+          navigate={navigate}
+          theme={theme}
+          toggleTheme={() =>
+            setTheme((value) => (value === "dark" ? "light" : "dark"))
           }
+          openCommand={() => setCommandOpen(true)}
         />
         <div key={screen} ref={scrollRef} className="page-transition">
           {screen === "overview" && (
