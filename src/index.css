@@ -95,8 +95,14 @@
   .page-title { margin-top: 10px; font-family: 'Instrument Serif', Georgia, serif; font-size: 46px; line-height: 1.02; font-weight: 400; letter-spacing: -1.1px; color: var(--text); }
   .page-subtitle { margin-top: 13px; max-width: 44rem; font-size: 13px; line-height: 1.65; color: var(--muted); }
   .section-heading h2 { margin-top: 1.25rem; font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(2.5rem, 5.2vw, 4.1rem); line-height: 1.02; font-weight: 400; letter-spacing: -0.4px; }
-  .title-input { display: block; width: 100%; max-width: 40rem; background: transparent; font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(1.9rem, 4vw, 2.7rem); line-height: 1.05; font-weight: 400; letter-spacing: -0.5px; color: var(--text); }
+  .title-input { display: block; width: auto; min-width: min(260px, 100%); max-width: 100%; resize: none; border: 0; padding: 0; overflow: hidden; background: transparent; field-sizing: content; font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(1.9rem, 4vw, 2.7rem); line-height: 1.05; font-weight: 400; letter-spacing: -0.5px; color: var(--text); }
   .title-input:focus { border-radius: 2px; box-shadow: 0 2px 0 var(--accent); }
+  @supports not (field-sizing: content) {
+    .title-input { width: 100%; max-width: 40rem; }
+    textarea.criterion-area { max-height: 6.5em; overflow-y: auto; }
+  }
+  /* Auto-growing single-line textareas (plan criteria & risk titles): text wraps instead of clipping. */
+  textarea.criterion-area { field-sizing: content; min-block-size: 1.6em; max-block-size: 6.5em; resize: none; background: transparent; border-inline: 0; border-top: 0; }
   .mono { font-family: 'IBM Plex Mono', monospace; }
 
   .panel, .dashboard-panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
@@ -256,7 +262,7 @@
   .queue-all { display: inline-flex; align-items: center; gap: 8px; margin-top: 17px; border: 0; padding: 0; background: none; color: var(--accent); font-size: 10px; font-weight: 500; }
   .queue-all:hover { color: var(--text); }
 
-  .review-register { margin-top: 36px; }
+  .review-register { margin-top: 36px; overflow-x: auto; min-width: 0; }
   .register-heading { display: flex; align-items: center; justify-content: space-between; }
   .register-heading > div { display: flex; align-items: center; gap: 9px; }
   .register-heading h3 { font-size: 15px; font-weight: 500; color: var(--text); }
@@ -296,12 +302,14 @@
   .search-field input::placeholder { color: var(--faint); }
   .control-group { display: flex; gap: 8px; min-width: 0; overflow-x: auto; }
   .control { display: flex; align-items: center; height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); font-family: inherit; font-size: 12px; white-space: nowrap; }
+  /* NOTE: rows use .table-line — ".table-row" is a Tailwind utility name
+     (display: table-row) that would override our grid in the utilities layer. */
   .table-panel { overflow-x: auto; }
   .data-table { min-width: 680px; }
-  .table-head, .table-row { display: grid; grid-template-columns: 2fr .8fr .55fr .8fr 60px; align-items: center; gap: 16px; padding: 0 18px; }
+  .table-head, .table-line { display: grid; grid-template-columns: 2fr .8fr .55fr .8fr 60px; align-items: center; gap: 16px; padding: 0 18px; }
   .table-head { height: 43px; background: var(--panel-2); color: var(--muted); font: 10px 'IBM Plex Mono', monospace; text-transform: uppercase; }
-  .table-row { min-height: 66px; width: 100%; border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); text-align: left; font-size: 12px; }
-  .table-row:hover { background: var(--panel-2); }
+  .table-line { min-height: 66px; width: 100%; border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); text-align: left; font-size: 12px; }
+  .table-line:hover { background: var(--panel-2); }
   .table-project { display: grid; grid-template-columns: 30px 1fr; column-gap: 9px; min-width: 0; border: 0; background: none; text-align: left; font-family: inherit; }
   .table-project i { grid-row: 1 / 3; display: grid; place-items: center; color: var(--muted); }
   .table-project b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; color: var(--text); }
@@ -397,7 +405,7 @@
   .form-section-heading > span { font: 10px 'IBM Plex Mono', monospace; color: var(--accent); }
   .form-section-heading h3 { font-size: 15px; font-weight: 500; color: var(--text); }
   .form-section-heading p { margin-top: .25rem; font-size: .72rem; color: var(--muted); }
-  .character-count { align-self: flex-end; margin-top: -0.2rem; font-size: .6rem; font-family: 'IBM Plex Mono', monospace; color: var(--faint); }
+  .character-count { align-self: flex-end; margin-top: -0.2rem; font-size: .6rem; font-family: 'IBM Plex Mono', monospace; color: var(--muted); }
   .validation-message { animation: validation-in .25s ease both; }
   .context-tip { display: flex; gap: .75rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); padding: 1rem; font-size: .72rem; line-height: 1.6; color: var(--muted); }
   .context-tip svg { flex-shrink: 0; color: var(--accent); }
@@ -579,6 +587,27 @@
 .theme-dark .skeleton { background: #182538; }
 :root[data-theme="dark"] :focus-visible { outline-color: var(--accent); }
 :root[data-theme="dark"] select option { background: #141f30; color: #e5eaf2; }
+/* Editable plan textareas stay borderless even under the legacy dark overrides. */
+.theme-dark textarea.criterion-area { border-color: transparent !important; background: transparent !important; }
+.theme-dark textarea.criterion-area:focus { border-color: rgb(255 255 255 / .3) !important; }
+
+/* ---------- Landing (share the app tokens so dark mode stays legible;
+     the #101827 hero band and #process cards that stay dark are intentional) ---------- */
+.landing-shell { min-height: 100vh; background: var(--bg); color: var(--text); }
+.landing-container { max-width: 1240px; margin-inline: auto; padding-inline: 20px; }
+.section-wrap { padding-block: 84px; }
+.section-heading > span { display: block; font: 10px 'IBM Plex Mono', monospace; letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted); }
+.section-heading > p { max-width: 42rem; margin-top: 16px; color: var(--muted); font-size: 13.5px; line-height: 1.7; }
+.section-kicker-dark { display: block; font: 10px 'IBM Plex Mono', monospace; letter-spacing: 1.6px; text-transform: uppercase; color: #9bb2ff; }
+@media (min-width: 1024px) {
+  .landing-container { padding-inline: 32px; }
+}
+.theme-dark .landing-cta { background: #141f30 !important; border-color: rgb(255 255 255 / .1) !important; }
+.theme-dark .landing-cta h2 { color: #e5eaf2 !important; }
+.theme-dark .landing-cta-kicker { color: #9bb2ff !important; }
+.theme-dark .landing-cta .text-slate-600 { color: #8e9bad !important; }
+.theme-dark .bg-slate-200 { background: rgb(255 255 255 / .09) !important; }
+.theme-dark .border-slate-300 { border-color: rgb(255 255 255 / .12) !important; }
 
 @media (min-width: 1550px) {
   .page { padding: 44px 64px 30px; }
@@ -602,6 +631,8 @@
 }
 @media (max-width: 1023px) {
   .app-main, .app-main.sidebar-collapsed { padding-left: 0; }
+  /* Sidebar is off-canvas below lg — expose the hamburger in the topbar. */
+  .menu-button { display: inline-grid; }
   .app-sidebar { width: 260px !important; }
   .app-sidebar .sidebar-label, .app-sidebar .project-copy, .app-sidebar .nav-kicker, .app-sidebar .storage { width: auto !important; opacity: 1 !important; display: block !important; }
   .app-sidebar .sidebar-brand { width: auto !important; }
@@ -618,6 +649,7 @@
   .settings-nav button { white-space: nowrap; }
 }
 @media (max-width: 767px) {
+  .data-table { min-width: 560px; }
   .council-toolbar { align-items: flex-start; }
   .council-canvas { height: auto; padding: 1rem; }
   .council-lines { display: none; }

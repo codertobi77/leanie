@@ -1,5 +1,6 @@
 import type { Project, Phase, Risk } from "../types"
 import { neonClient } from "./neon"
+import { trackEvent } from "./observability"
 
 const STORAGE_KEY = "leanie-projects-v1"
 
@@ -54,11 +55,27 @@ function fromRow(row: any): Project {
 
 export async function loadProjects(userId?: string | null): Promise<Project[]> {
   const queued = readOfflineQueue().map((item) => item.project)
+  const mergeQueued = (base: Project[]) => {
+    const merged = new Map(base.map((p) => [p.id, p]))
+    for (const project of queued) merged.set(project.id, project)
+    return Array.from(merged.values())
+  }
+  const readLocal = (): Project[] => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      return stored ? (JSON.parse(stored) as Project[]) : []
+    } catch (error) {
+      console.warn("loadProjects: could not read local cache", error)
+      return []
+    }
+  }
+
   if (userId && neonClient) {
     try {
       await syncOfflineProjects()
-    } catch {
-      // keep queue for the next retry
+    } catch (error) {
+      // Keep the offline queue for the next retry; remote load still proceeds.
+      console.warn("loadProjects: offline sync deferred", error)
     }
     try {
       const { data, error } = await neonClient
@@ -66,27 +83,14 @@ export async function loadProjects(userId?: string | null): Promise<Project[]> {
         .select("*")
         .order("updated_at", { ascending: false })
       if (error) throw error
-      const base = (data ?? []).map(fromRow)
-      const merged = new Map(base.map((p) => [p.id, p]))
-      for (const project of queued) merged.set(project.id, project)
-      return Array.from(merged.values())
-    } catch {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      const base: Project[] = stored ? (JSON.parse(stored) as Project[]) : []
-      const merged = new Map(base.map((p) => [p.id, p]))
-      for (const project of queued) merged.set(project.id, project)
-      return Array.from(merged.values())
+      return mergeQueued((data ?? []).map(fromRow))
+    } catch (error) {
+      console.warn("loadProjects: falling back to local cache", error)
+      return mergeQueued(readLocal())
     }
   }
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    const base: Project[] = stored ? (JSON.parse(stored) as Project[]) : []
-    const merged = new Map(base.map((p) => [p.id, p]))
-    for (const project of queued) merged.set(project.id, project)
-    return Array.from(merged.values())
-  } catch {
-    return queued
-  }
+
+  return mergeQueued(readLocal())
 }
 
 export async function saveProject(project: Project, userId?: string | null): Promise<void> {
@@ -96,9 +100,11 @@ export async function saveProject(project: Project, userId?: string | null): Pro
         .from("leanie_projects")
         .upsert(toRow(project, userId), { onConflict: "id" })
       if (error) throw error
+      trackEvent("project.save", { projectId: project.id, mode: "remote" })
       return
     } catch (error) {
       queueProjectForSync(project, userId)
+      trackEvent("project.save_queued", { projectId: project.id, mode: "offline-queue" })
       throw error
     }
   }
@@ -107,12 +113,14 @@ export async function saveProject(project: Project, userId?: string | null): Pro
     ? current.map((p) => (p.id === project.id ? project : p))
     : [project, ...current]
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  trackEvent("project.save", { projectId: project.id, mode: "local" })
 }
 
 export async function removeProject(id: string, userId?: string | null): Promise<void> {
   if (userId && neonClient) {
     const { error } = await neonClient.from("leanie_projects").delete().eq("id", id)
     if (error) throw error
+    trackEvent("project.remove", { projectId: id, mode: "remote" })
     return
   }
   const current = await loadProjects(null)
@@ -120,6 +128,7 @@ export async function removeProject(id: string, userId?: string | null): Promise
     STORAGE_KEY,
     JSON.stringify(current.filter((p) => p.id !== id)),
   )
+  trackEvent("project.remove", { projectId: id, mode: "local" })
 }
 
 const OFFLINE_QUEUE_KEY = "leanie-offline-queue"
@@ -170,18 +179,11 @@ export async function refreshSharedProject(token: string) {
   const shareUrl = import.meta.env.VITE_NEON_FUNCTION_SHARE_BASE_URL as string | undefined
   if (!shareUrl) return null
   try {
-    const fullUrl = `${shareUrl}?token=${encodeURIComponent(token)}`
-    console.log('refresh fetch from', fullUrl)
-    const response = await fetch(fullUrl)
-    if (!response.ok) {
-      console.log('refresh HTTP', response.status)
-      return null
-    }
-    const row = await response.json()
-    console.log('refresh result', row.title, 'revision', row.revision)
-    return fromRow(row)
-  } catch {
-    console.log('refresh network error')
+    const response = await fetch(`${shareUrl}?token=${encodeURIComponent(token)}`)
+    if (!response.ok) return null
+    return fromRow(await response.json())
+  } catch (error) {
+    console.warn("refreshSharedProject: network error", error)
     return null
   }
 }
@@ -196,12 +198,18 @@ export async function persistSharedProject(project: Project, token: string) {
       body: JSON.stringify({ token, project, revision: project.revision ?? 1 }),
     })
     const data = await response.json()
-    console.log("persistSharedProject", response.status, data?.title, data?.revision, data?.error)
-    if (response.status === 409 && data.current) return { status: "conflict" as const, project: fromRow(data.current) }
-    if (!response.ok) return { status: "error" as const, error: data.error }
+    if (response.status === 409 && data.current) {
+      trackEvent("share.persist_conflict", { projectId: project.id, revision: project.revision ?? 1 })
+      return { status: "conflict" as const, project: fromRow(data.current) }
+    }
+    if (!response.ok) {
+      trackEvent("share.persist_error", { projectId: project.id, http: response.status })
+      return { status: "error" as const, error: data.error ?? `HTTP ${response.status}` }
+    }
+    trackEvent("share.persist_ok", { projectId: project.id, revision: (data as any)?.revision })
     return { status: "ok" as const, project: fromRow(data) }
   } catch (error) {
-    console.log("persistSharedProject network error", String(error))
+    trackEvent("share.persist_network", { projectId: project.id })
     return { status: "network" as const, error: String(error) }
   }
 }
@@ -236,6 +244,19 @@ export async function saveProjectVersion(project: Project, action: string, userI
   })
 }
 
+function ephemeralPresenceId(): string {
+  try {
+    const key = "leanie-presence-id"
+    const existing = sessionStorage.getItem(key)
+    if (existing) return existing
+    const id = `anon-${crypto.randomUUID()}`
+    sessionStorage.setItem(key, id)
+    return id
+  } catch {
+    return `anon-${crypto.randomUUID()}`
+  }
+}
+
 export async function heartbeatSharePresence(
   token: string,
   userId: string | null,
@@ -246,14 +267,14 @@ export async function heartbeatSharePresence(
     await neonClient.from("leanie_share_presence").upsert(
       {
         share_token: token,
-        user_id: userId || "anonymous",
+        user_id: userId || ephemeralPresenceId(),
         user_email: email,
         last_seen_at: new Date().toISOString(),
       },
       { onConflict: "share_token,user_id" },
     )
-  } catch {
-    // ignore
+  } catch (error) {
+    console.warn("heartbeatSharePresence failed", error)
   }
 }
 
@@ -276,13 +297,7 @@ export async function loadSharePresence(token: string): Promise<Array<{ userId: 
   }
 }
 
-export async function trackResource(
-  _path: string,
-  _metadata?: Record<string, unknown>,
-): Promise<void> {
-  // placeholder for observability hooks (P5)
-  return
-}
+export { trackEvent, trackResource } from "./observability"
 export async function loadProjectVersions(projectId: string) {
   if (!neonClient) return []
   const { data, error } = await neonClient.from("leanie_versions").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(25)

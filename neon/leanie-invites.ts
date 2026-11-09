@@ -72,8 +72,35 @@ export default async function leanieInvites(request: Request): Promise<Response>
     if (action === "revoke") {
       const id = String(body.id ?? "");
       if (!id) return new Response(JSON.stringify({ error: "id required" }), { status: 400, headers: CORS });
-      await pool.query("UPDATE public.leanie_project_invites SET status='revoked' WHERE id=$1", [id]);
-      return new Response(JSON.stringify({ ok: true }), { headers: CORS });
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const { rows } = await client.query(
+          "SELECT token, status FROM public.leanie_project_invites WHERE id=$1 FOR UPDATE",
+          [id],
+        );
+        if (!rows.length) {
+          await client.query("ROLLBACK");
+          return new Response(JSON.stringify({ error: "Invite not found" }), { status: 404, headers: CORS });
+        }
+        const invite = rows[0];
+        await client.query(
+          "UPDATE public.leanie_project_invites SET status='revoked' WHERE id=$1",
+          [id],
+        );
+        // An accepted invite created a share keyed by the invite token; remove it so
+        // access is actually revoked (not just the pending invite record).
+        if (invite.token) {
+          await client.query("DELETE FROM public.leanie_shares WHERE token=$1", [invite.token]);
+        }
+        await client.query("COMMIT");
+        return new Response(JSON.stringify({ ok: true, revokedShare: invite.status === "accepted" }), { headers: CORS });
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        return new Response(JSON.stringify({ error: String(error) }), { status: 500, headers: CORS });
+      } finally {
+        client.release();
+      }
     }
 
     if (action === "accept") {

@@ -31,7 +31,6 @@ const STATUS_KEYS = ["Draft", "Analyzing", "Plan ready", "Validated"] as const
  */
 function parseQuery(raw: string) {
   const tokens = raw.split(/\s+/).filter(Boolean)
-  const status: string | null = null
   let statusFilter: string | null = null
   let tagFilter: string | null = null
   const text: string[] = []
@@ -48,7 +47,7 @@ function parseQuery(raw: string) {
       text.push(token)
     }
   }
-  return { text: text.join(" ").toLowerCase(), statusFilter, tagFilter, status }
+  return { text: text.join(" ").toLowerCase(), statusFilter, tagFilter }
 }
 
 export function CommandPalette({

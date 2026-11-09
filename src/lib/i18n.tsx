@@ -194,6 +194,11 @@ const en = {
   "council.demoNotice": "Deterministic demo · no live AI",
   "settings.preferences": "Preferences",
   "settings.preferencesBody": "Manage display, language and account options for this device.",
+  "settings.appearanceBody": "Choose how LeanIE Plan appears and which language you use on this device.",
+  "settings.accountBody": "Manage your profile, password and active sessions.",
+  "settings.dataBody": "Export, review or remove data stored locally or in the cloud.",
+  "settings.aboutBody": "Version, credits and information about LeanIE Plan.",
+  "results.noRisks": "No risks identified for this project.",
 } as const
 
 export type DictKey = keyof typeof en
@@ -373,6 +378,11 @@ const fr: Record<DictKey, string> = {
   "council.demoNotice": "Démo déterministe · sans IA en direct",
   "settings.preferences": "Préférences",
   "settings.preferencesBody": "Gérez les options d'affichage, de langue et de compte de cet appareil.",
+  "settings.appearanceBody": "Choisissez l'apparence de LeanIE Plan et la langue utilisée sur cet appareil.",
+  "settings.accountBody": "Gérez votre profil, votre mot de passe et vos sessions actives.",
+  "settings.dataBody": "Exportez, consultez ou supprimez les données stockées localement ou dans le cloud.",
+  "settings.aboutBody": "Version, mentions et informations sur LeanIE Plan.",
+  "results.noRisks": "Aucun risque identifié pour ce projet.",
 }
 
 const dictionaries: Record<Lang, Record<DictKey, string>> = { en, fr }

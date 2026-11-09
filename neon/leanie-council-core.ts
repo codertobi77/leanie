@@ -11,6 +11,11 @@ export interface StepTarget {
   model: string;
   pricePrompt: number; // USD per 1M prompt tokens
   priceCompletion: number; // USD per 1M completion tokens
+  // P5.15 meta-provider: routes a step across concrete targets (no schema change).
+  meta?: {
+    strategy: "fallback" | "first";
+    targets: StepTarget[];
+  };
 }
 
 export interface StepDetail {
@@ -64,7 +69,11 @@ function modelPrice(providerRow: any, model: string, fallback: StepTarget) {
   };
 }
 
-function stepTargetFromProvider(providerRow: any, model: string, fallback: StepTarget): StepTarget | null {
+export function isMetaProviderRow(providerRow: any): boolean {
+  return String(providerRow?.base_url || "").startsWith("meta:");
+}
+
+function resolveConcreteTarget(providerRow: any, model: string, fallback: StepTarget): StepTarget | null {
   if (!providerRow?.base_url || !providerRow?.api_key) return null;
   const prices = modelPrice(providerRow, model, fallback);
   return {
@@ -77,6 +86,44 @@ function stepTargetFromProvider(providerRow: any, model: string, fallback: StepT
   };
 }
 
+export function stepTargetFromProvider(
+  providerRow: any,
+  model: string,
+  fallback: StepTarget,
+  byId?: Map<string, any>,
+): StepTarget | null {
+  if (!providerRow) return null;
+  if (isMetaProviderRow(providerRow)) {
+    const models = Array.isArray(providerRow.models) ? providerRow.models : [];
+    const entry = models.find((m: any) => (typeof m === "string" ? m === model : m?.id === model));
+    const rawTargets = Array.isArray((entry as any)?.targets) ? (entry as any).targets : [];
+    const strategy: "fallback" | "first" =
+      (entry as any)?.strategy === "first" ? "first" : "fallback";
+    const targets = (byId ? rawTargets : [])
+      .map((t: any) => {
+        const pid = String(t?.providerId || "");
+        const pmodel = String(t?.model || "");
+        if (!pid || !pmodel) return null;
+        const row = byId!.get(pid);
+        if (!row || isMetaProviderRow(row)) return null; // concrete only, no recursion
+        return resolveConcreteTarget(row, pmodel, fallback);
+      })
+      .filter(Boolean) as StepTarget[];
+    if (!targets.length) return null;
+    return {
+      providerId: String(providerRow.id),
+      provider: String(providerRow.name || "meta"),
+      baseUrl: String(providerRow.base_url || "meta:fallback"),
+      apiKey: "",
+      model,
+      pricePrompt: targets[0].pricePrompt,
+      priceCompletion: targets[0].priceCompletion,
+      meta: { strategy, targets },
+    };
+  }
+  return resolveConcreteTarget(providerRow, model, fallback);
+}
+
 // Build a per-step plan from a published council config (production path).
 export async function loadPublishedPlan(pool: Pool): Promise<{ plan: Record<string, StepTarget>; configId: string | null; configName: string | null } | null> {
   const fallback = envTarget(defaultModel());
@@ -85,7 +132,7 @@ export async function loadPublishedPlan(pool: Pool): Promise<{ plan: Record<stri
   );
   if (!rows.length) return null;
   const { rows: providers } = await pool.query(`SELECT id, name, base_url, api_key, models FROM public.leanie_providers`);
-  const byId = new Map(providers.map((p: any) => [String(p.id), p]));
+  const byId = new Map<string, any>(providers.map((p: any) => [String(p.id), p]));
   const plan: Record<string, StepTarget> = {};
   const configSteps = rows[0].steps || {};
   for (const step of COUNCIL_STEPS) {
@@ -93,7 +140,7 @@ export async function loadPublishedPlan(pool: Pool): Promise<{ plan: Record<stri
     const model = entry?.model ? String(entry.model) : "";
     if (!model) continue;
     const providerRow = entry?.providerId ? byId.get(String(entry.providerId)) : null;
-    const target = providerRow ? stepTargetFromProvider(providerRow, model, fallback) : null;
+    const target = providerRow ? stepTargetFromProvider(providerRow, model, fallback, byId) : null;
     if (target) plan[step] = target;
   }
   if (!Object.keys(plan).length) return null;
@@ -106,7 +153,7 @@ export async function resolvePlanOverride(pool: Pool, steps: unknown): Promise<R
   const fallback = envTarget(defaultModel());
   if (!steps || typeof steps !== "object") return {};
   const { rows: providers } = await pool.query(`SELECT id, name, base_url, api_key, models FROM public.leanie_providers`);
-  const byId = new Map(providers.map((p: any) => [String(p.id), p]));
+  const byId = new Map<string, any>(providers.map((p: any) => [String(p.id), p]));
   const plan: Record<string, StepTarget> = {};
   for (const step of COUNCIL_STEPS) {
     const entry = (steps as Record<string, any>)[step];
@@ -114,13 +161,13 @@ export async function resolvePlanOverride(pool: Pool, steps: unknown): Promise<R
     const providerId = entry?.providerId ? String(entry.providerId) : "";
     if (!model || !providerId) continue;
     const providerRow = byId.get(providerId);
-    const target = providerRow ? stepTargetFromProvider(providerRow, model, fallback) : null;
+    const target = providerRow ? stepTargetFromProvider(providerRow, model, fallback, byId) : null;
     if (target) plan[step] = target;
   }
   return plan;
 }
 
-export async function chat(target: StepTarget, system: string, user: string, timeoutMs = 25000) {
+async function chatOnce(target: StepTarget, system: string, user: string, timeoutMs = 25000) {
   const startedAt = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -149,10 +196,40 @@ export async function chat(target: StepTarget, system: string, user: string, tim
       completionTokens,
       totalTokens,
       latencyMs: Date.now() - startedAt,
+      effective: {
+        provider: target.provider,
+        model: target.model,
+        pricePrompt: target.pricePrompt,
+        priceCompletion: target.priceCompletion,
+      },
     };
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function chat(target: StepTarget, system: string, user: string, timeoutMs = 25000) {
+  if (target.meta?.targets?.length) {
+    const errors: string[] = [];
+    for (const concrete of target.meta.targets) {
+      try {
+        const reply = await chatOnce(concrete, system, user, timeoutMs);
+        return {
+          ...reply,
+          effective: {
+            ...reply.effective,
+            // surface the meta route while keeping concrete provider/model for metrics
+            provider: `${target.provider}>${reply.effective.provider}`,
+            model: reply.effective.model,
+          },
+        };
+      } catch (error) {
+        errors.push(`${concrete.provider}/${concrete.model}: ${String(error).slice(0, 160)}`);
+      }
+    }
+    throw new Error(`Meta-provider ${target.model} failed: ${errors.join(" | ").slice(0, 500)}`);
+  }
+  return chatOnce(target, system, user, timeoutMs);
 }
 
 export function parseJson(text: string) {
@@ -186,15 +263,21 @@ export async function runPipeline(opts: {
       const reply = await chat(target, system, user);
       const parsed = parseJson(reply.text);
       if (!parsed) jsonValid = false;
+      const effective = (reply as any).effective ?? target;
       const detail: StepDetail = {
         step,
-        provider: target.provider,
-        model: target.model,
+        provider: String(effective.provider ?? target.provider),
+        model: String(effective.model ?? target.model),
         latencyMs: reply.latencyMs,
         promptTokens: reply.promptTokens,
         completionTokens: reply.completionTokens,
         totalTokens: reply.totalTokens,
-        costUsd: Number(((reply.promptTokens / 1e6) * target.pricePrompt + (reply.completionTokens / 1e6) * target.priceCompletion).toFixed(6)),
+        costUsd: Number(
+          (
+            (reply.promptTokens / 1e6) * Number(effective.pricePrompt ?? target.pricePrompt ?? 0) +
+            (reply.completionTokens / 1e6) * Number(effective.priceCompletion ?? target.priceCompletion ?? 0)
+          ).toFixed(6),
+        ),
         jsonValid: !!parsed,
         error: null,
       };

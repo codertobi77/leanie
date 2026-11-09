@@ -108,6 +108,7 @@ import {
   heartbeatSharePresence,
   loadSharePresence,
 } from "./lib/projectsRepo"
+import { parseCsvRows } from "./lib/csv"
 import {
   formatDate,
   formatToday,
@@ -204,7 +205,7 @@ function AnimatedNumber({ value }: { value: number }) {
 function Landing({ enter }: { enter: (screen?: Screen) => void }) {
   const { t } = useLang()
   return (
-    <div className="min-h-screen overflow-hidden bg-[#f8f9fc] text-[#101827]">
+    <div className="landing-shell min-h-screen overflow-hidden">
       <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#101827]/95 text-white backdrop-blur-xl">
         <div className="mx-auto flex h-18 max-w-[1240px] items-center justify-between px-5 lg:px-8">
           <Brand light />
@@ -221,7 +222,7 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
           </nav>
           <button
             onClick={() => enter("overview")}
-            className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-[#101827] transition hover:bg-blue-50"
+            className="rounded-lg bg-[#f8fbff] px-4 py-2.5 text-sm font-semibold text-[#101827] transition hover:bg-blue-50"
           >
             {t("landing.getStarted")}
           </button>
@@ -328,52 +329,54 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
         </section>
 
         <section id="process" className="section-wrap">
-          <div className="section-heading">
-            <span>01 / PROCESS</span>
-            <h2>
-              From open question
-              <br />
-              to executable direction.
-            </h2>
-            <p>
-              LeanIE Plan introduces productive tension before commitment, then
-              translates the strongest reasoning into practical steps.
-            </p>
-          </div>
-          <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 md:grid-cols-3">
-            {([
-              [
-                Lightbulb,
-                "01",
-                "Describe your idea",
-                "Capture the objective, context, desired outcome, and the constraints that shape reality.",
-              ],
-              [
-                BrainCircuit,
-                "02",
-                "Challenge it with the Council",
-                "Independent analytical roles test strategy, feasibility, and hidden assumptions.",
-              ],
-              [
-                ListChecks,
-                "03",
-                "Get an actionable plan",
-                "The Arbiter resolves disagreements and creates an editable phased plan.",
-              ],
-            ] as const).map(([Icon, n, title, body]) => (
-              <div key={String(n)} className="bg-white p-7 lg:p-9">
-                <div className="flex items-center justify-between">
-                  <span className="grid size-11 place-items-center rounded-xl bg-[#eef2ff] text-[#526fd2]">
-                    <Icon size={20} />
-                  </span>
-                  <span className="font-mono text-xs text-slate-400">{n}</span>
+          <div className="landing-container">
+            <div className="section-heading">
+              <span>01 / PROCESS</span>
+              <h2>
+                From open question
+                <br />
+                to executable direction.
+              </h2>
+              <p>
+                LeanIE Plan introduces productive tension before commitment, then
+                translates the strongest reasoning into practical steps.
+              </p>
+            </div>
+            <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 md:grid-cols-3">
+              {([
+                [
+                  Lightbulb,
+                  "01",
+                  "Describe your idea",
+                  "Capture the objective, context, desired outcome, and the constraints that shape reality.",
+                ],
+                [
+                  BrainCircuit,
+                  "02",
+                  "Challenge it with the Council",
+                  "Independent analytical roles test strategy, feasibility, and hidden assumptions.",
+                ],
+                [
+                  ListChecks,
+                  "03",
+                  "Get an actionable plan",
+                  "The Arbiter resolves disagreements and creates an editable phased plan.",
+                ],
+              ] as const).map(([Icon, n, title, body]) => (
+                <div key={String(n)} className="bg-white p-7 lg:p-9">
+                  <div className="flex items-center justify-between">
+                    <span className="grid size-11 place-items-center rounded-xl bg-[#eef2ff] text-[#526fd2]">
+                      <Icon size={20} />
+                    </span>
+                    <span className="font-mono text-xs text-slate-400">{n}</span>
+                  </div>
+                  <h3 className="mt-14 text-xl font-semibold tracking-tight">
+                    {title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">{body}</p>
                 </div>
-                <h3 className="mt-14 text-xl font-semibold tracking-tight">
-                  {title}
-                </h3>
-                <p className="mt-3 text-sm leading-6 text-slate-600">{body}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </section>
 
@@ -458,55 +461,57 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
         </section>
 
         <section id="benefits" className="section-wrap">
-          <div className="section-heading">
-            <span>03 / OUTCOMES</span>
-            <h2>
-              Move forward with
-              <br />
-              eyes open.
-            </h2>
-          </div>
-          <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-            {([
-              [
-                Gauge,
-                "Feasibility",
-                "Understand what is achievable before committing resources.",
-              ],
-              [
-                ShieldAlert,
-                "Risk awareness",
-                "Surface fragile assumptions while they are still inexpensive to address.",
-              ],
-              [
-                CircleDot,
-                "Clarity",
-                "Separate evidence, assumptions, disagreements, and recommendations.",
-              ],
-              [
-                Rocket,
-                "Execution",
-                "Translate sound reasoning into sequenced work with clear outcomes.",
-              ],
-            ] as const).map(([Icon, title, body]) => (
-              <div
-                key={String(title)}
-                className="border-t border-slate-300 pt-5"
-              >
-                <Icon size={20} className="text-[#648bff]" />
-                <h3 className="mt-8 font-semibold">{title}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
-              </div>
-            ))}
+          <div className="landing-container">
+            <div className="section-heading">
+              <span>03 / OUTCOMES</span>
+              <h2>
+                Move forward with
+                <br />
+                eyes open.
+              </h2>
+            </div>
+            <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+              {([
+                [
+                  Gauge,
+                  "Feasibility",
+                  "Understand what is achievable before committing resources.",
+                ],
+                [
+                  ShieldAlert,
+                  "Risk awareness",
+                  "Surface fragile assumptions while they are still inexpensive to address.",
+                ],
+                [
+                  CircleDot,
+                  "Clarity",
+                  "Separate evidence, assumptions, disagreements, and recommendations.",
+                ],
+                [
+                  Rocket,
+                  "Execution",
+                  "Translate sound reasoning into sequenced work with clear outcomes.",
+                ],
+              ] as const).map(([Icon, title, body]) => (
+                <div
+                  key={String(title)}
+                  className="border-t border-slate-300 pt-5"
+                >
+                  <Icon size={20} className="text-[#648bff]" />
+                  <h3 className="mt-8 font-semibold">{title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
         <section className="px-5 pb-20 lg:px-8">
-          <div className="mx-auto max-w-[1240px] rounded-[24px] bg-[#e9edff] px-6 py-16 text-center sm:px-12 lg:py-20">
-            <p className="text-xs font-semibold tracking-[.18em] text-[#526fd2]">
+          <div className="landing-cta mx-auto max-w-[1240px] rounded-[24px] border border-[#648bff]/15 bg-[#e9edff] px-6 py-16 text-center sm:px-12 lg:py-20">
+            <p className="landing-cta-kicker text-xs font-semibold tracking-[.18em] text-[#526fd2]">
               START WITH BETTER QUESTIONS
             </p>
-            <h2 className="mx-auto mt-5 max-w-3xl text-4xl font-medium tracking-[-.045em] sm:text-5xl">
+            <h2 className="mx-auto mt-5 max-w-3xl text-4xl font-medium tracking-[-.045em] text-[#101827] sm:text-5xl">
               Your idea deserves more than a first answer.
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-slate-600">
@@ -519,10 +524,10 @@ function Landing({ enter }: { enter: (screen?: Screen) => void }) {
           </div>
         </section>
       </main>
-      <footer className="border-t border-slate-200 bg-white">
+      <footer className="border-t border-slate-200 bg-white dark:border-[rgb(255,255,255,0.09)] dark:bg-[#141f30]">
         <div className="mx-auto flex max-w-[1240px] flex-col gap-5 px-5 py-8 sm:flex-row sm:items-center sm:justify-between lg:px-8">
           <Brand />
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             {t("landing.footerTagline")}
           </p>
         </div>
@@ -949,7 +954,7 @@ function Dashboard({
           <section className="focus-review">
             <div className="section-rule">
               <span>01 — {t("dashboard.continueLabel")}</span>
-              <span>{focus.id.slice(0, 6).toUpperCase()}</span>
+              <span>{fmtDate(focus.updatedAt, lang)}</span>
             </div>
             <div className="focus-project">
               <div className="focus-project-meta">
@@ -1355,7 +1360,7 @@ function ProjectsScreen({
             {filtered.map((p) => (
               <div
                 key={p.id}
-                className="table-row"
+                className="table-line"
                 onClick={() => open(p)}
                 role="row"
               >
@@ -1880,6 +1885,7 @@ function CouncilScreen({
 }
 
 function Results({ project, plan }: { project: Project; plan: () => void }) {
+  const { t } = useLang()
   return (
     <div className="page max-w-5xl">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
@@ -1997,6 +2003,11 @@ function Results({ project, plan }: { project: Project; plan: () => void }) {
                 <span className="status status-amber">{r.likelihood}</span>
               </div>
             ))}
+            {!project.risks.length && (
+              <p className="pt-1 text-xs leading-5 text-slate-500">
+                {t("results.noRisks")}
+              </p>
+            )}
           </div>
         </ReportSection>
       </div>
@@ -2150,10 +2161,16 @@ function PlanScreen({
     const interval = window.setInterval(async () => {
       try {
         const remote = await refreshSharedProject(token)
-        if (!remote || remote.id !== project.id || remote.revision === project.revision) return
+        if (!remote || remote.id !== project.id) return
+        if (remote.revision === project.revision) return
+        // Do not clobber recent local edits: only adopt the remote copy when it is
+        // genuinely newer than what is on screen.
+        const remoteTs = Date.parse(remote.updatedAt || "")
+        const localTs = Date.parse(project.updatedAt || "")
+        if (Number.isFinite(remoteTs) && Number.isFinite(localTs) && remoteTs <= localTs) return
         updateProject(remote)
-      } catch {
-        // ignore transient collaboration polling errors
+      } catch (error) {
+        console.warn("Shared plan refresh failed", error)
       }
     }, 4000)
     return () => window.clearInterval(interval)
@@ -2715,18 +2732,19 @@ function PlanScreen({
   return (
     <div className="page max-w-6xl">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-3">
             <StatusPill status={project.status} />
             <span className="text-xs text-slate-400">
               Updated {fmtDate(project.updatedAt)}
             </span>
           </div>
-          <input
+          <textarea
             className="title-input mt-3"
             value={project.title}
             onChange={(e) => patch({ title: e.target.value })}
             aria-label="Project title"
+            rows={1}
           />
           <p className="mt-2 text-sm text-slate-500">
             Editable Council-generated plan · changes save locally
@@ -2933,17 +2951,18 @@ function PlanScreen({
             <h3 className="text-sm font-semibold">Success criteria</h3>
             <ul className="mt-4 space-y-3 text-xs leading-5 text-slate-600">
               {(project.successCriteria ?? []).map((criterion, index) => (
-                <li key={`${criterion}-${index}`} className="flex items-center gap-2">
-                  <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" />
-                  <input
+                <li key={`${criterion}-${index}`} className="flex items-start gap-2">
+                  <Check size={14} className="mt-1 shrink-0 text-emerald-600" />
+                  <textarea
                     value={criterion}
                     onChange={(event) => putSuccessCriterion(index, event.target.value)}
-                    className="min-w-0 flex-1 border-b border-transparent text-xs outline-none focus:border-slate-300"
+                    rows={1}
+                    className="criterion-area min-w-0 flex-1 border-b border-transparent py-0.5 text-xs leading-5 outline-none focus:border-slate-300"
                     aria-label="Success criterion"
                   />
                   <button
                     onClick={() => removeSuccessCriterion(index)}
-                    className="text-red-500"
+                    className="mt-0.5 shrink-0 text-red-500"
                     type="button"
                     aria-label="Remove success criterion"
                   >
@@ -2952,14 +2971,14 @@ function PlanScreen({
                 </li>
               ))}
             </ul>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               <input
                 value={newSuccessCriterion}
                 onChange={(event) => setNewSuccessCriterion(event.target.value)}
                 placeholder="Add criterion"
-                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs"
+                className="min-w-[8rem] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs"
               />
-              <button type="button" onClick={addSuccessCriterion} className="btn-secondary">
+              <button type="button" onClick={addSuccessCriterion} className="btn-secondary shrink-0">
                 <Plus size={13} />
               </button>
             </div>
@@ -2969,11 +2988,11 @@ function PlanScreen({
             <p className="mt-2 text-[11px] leading-5 text-slate-500">
               Re-run only one Council step and patch the completed plan.
             </p>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <select
                 value={replayStep}
                 onChange={(event) => setReplayStep(event.target.value)}
-                className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+                className="min-w-[10rem] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
                 aria-label="Council step selector"
               >
                 <option value="strategic">Strategic Analyst</option>
@@ -2986,7 +3005,7 @@ function PlanScreen({
                 type="button"
                 onClick={replayIsolatedStep}
                 disabled={replaying}
-                className="btn-secondary"
+                className="btn-secondary whitespace-normal"
               >
                 {replaying ? "Running..." : "Replay selected step"}
               </button>
@@ -2997,11 +3016,12 @@ function PlanScreen({
             <div className="mt-4 space-y-4">
               {project.risks.map((risk, index) => (
                 <div key={`${risk.title}-${index}`} className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <input
+                  <div className="flex flex-wrap items-start gap-2">
+                    <textarea
                       value={risk.title}
                       onChange={(event) => updateRisk(index, { title: event.target.value })}
-                      className="min-w-0 flex-1 text-xs font-medium outline-none border-b border-transparent focus:border-slate-300"
+                      rows={1}
+                      className="criterion-area min-w-0 flex-1 border-b border-transparent py-0.5 text-xs font-medium leading-5 outline-none focus:border-slate-300"
                       aria-label="Risk title"
                     />
                     <select
@@ -3009,7 +3029,7 @@ function PlanScreen({
                       onChange={(event) =>
                         updateRisk(index, { likelihood: event.target.value as Risk["likelihood"] })
                       }
-                      className="rounded-md border border-slate-200 bg-white text-[10px]"
+                      className="shrink-0 rounded-md border border-slate-200 bg-white text-[10px]"
                     >
                       <option>Low</option>
                       <option>Medium</option>
@@ -3017,7 +3037,7 @@ function PlanScreen({
                     </select>
                     <button
                       onClick={() => removeRisk(index)}
-                      className="text-red-500"
+                      className="shrink-0 text-red-500"
                       type="button"
                       aria-label="Remove risk"
                     >
@@ -3034,14 +3054,14 @@ function PlanScreen({
                 </div>
               ))}
             </div>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               <input
                 value={newRiskTitle}
                 onChange={(event) => setNewRiskTitle(event.target.value)}
                 placeholder="New risk"
-                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs"
+                className="min-w-[8rem] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs"
               />
-              <button type="button" onClick={addRisk} className="btn-secondary">
+              <button type="button" onClick={addRisk} className="btn-secondary shrink-0">
                 <Plus size={13} />
               </button>
             </div>
@@ -3452,7 +3472,18 @@ function SettingsScreen({
                 "settings.title",
             )}
           </h3>
-          <p>{t("settings.preferencesBody")}</p>
+          <p>
+            {t(
+              (
+                {
+                  appearance: "settings.appearanceBody",
+                  account: "settings.accountBody",
+                  data: "settings.dataBody",
+                  about: "settings.aboutBody",
+                } as const
+              )[tab] ?? "settings.preferencesBody",
+            )}
+          </p>
           <div>
           {tab === "appearance" && (
           <>
@@ -3975,6 +4006,7 @@ function MetricsTab({
   const [error, setError] = useState<string | null>(null)
   const [runsData, setRunsData] = useState<RunsResponse | null>(null)
   const [runsLoading, setRunsLoading] = useState(true)
+  const [runsError, setRunsError] = useState<string | null>(null)
   const [filters, setFilters] = useState(emptyRunsFilters)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(15)
@@ -4019,17 +4051,22 @@ function MetricsTab({
   }, [filters, page, pageSize])
 
   useEffect(() => {
-    if (!metricsUrl) return
+    if (!metricsUrl) {
+      setRunsLoading(false)
+      setRunsError("Metrics endpoint is not configured.")
+      return
+    }
     let cancelled = false
     const timer = setTimeout(async () => {
       setRunsLoading(true)
+      setRunsError(null)
       try {
         const response = await fetch(`${metricsUrl}?${runsQuery}`)
         if (!response.ok) throw new Error(`Runs request failed (${response.status})`)
         const payload = (await response.json()) as RunsResponse
         if (!cancelled) setRunsData(payload)
       } catch (err) {
-        if (!cancelled) notify("error", "Could not load runs", String(err))
+        if (!cancelled) setRunsError(String(err))
       } finally {
         if (!cancelled) setRunsLoading(false)
       }
@@ -4038,7 +4075,7 @@ function MetricsTab({
       cancelled = true
       clearTimeout(timer)
     }
-  }, [metricsUrl, runsQuery, notify])
+  }, [metricsUrl, runsQuery])
 
   const setFilter = (key: keyof typeof emptyRunsFilters, value: string) => {
     setFilters((previous) => {
@@ -4072,7 +4109,9 @@ function MetricsTab({
         <p className="text-xs text-slate-500">
           {data
             ? `${data.models.length} provider/model combination${data.models.length === 1 ? "" : "s"} measured`
-            : "No data yet"}
+            : !loading && !error
+              ? "No metrics data yet."
+              : "\u00A0"}
         </p>
         <button onClick={loadModels} className="btn-secondary" disabled={loading}>
           <RotateCw size={14} className={loading ? "animate-spin" : ""} />
@@ -4086,6 +4125,10 @@ function MetricsTab({
           <span>UNAVAILABLE</span>
           <p>{error}</p>
         </div>
+      )}
+
+      {!loading && !error && data && data.models.length === 0 && (
+        <p className="mt-6 text-sm text-slate-500">No provider measurements recorded yet.</p>
       )}
 
       {data?.models.map((model) => (
@@ -4189,7 +4232,9 @@ function MetricsTab({
           </button>
         </div>
 
-        {runsLoading ? (
+        {runsError ? (
+          <p className="mt-5 text-xs text-slate-500">{runsError}</p>
+        ) : runsLoading ? (
           <p className="mt-5 text-xs text-slate-500">Loading runs…</p>
         ) : runsData && runsData.runs.length > 0 ? (
           <div className="mt-5 overflow-x-auto">
@@ -5172,12 +5217,25 @@ export default function App() {
         const fallback = auth.user ? [] : [demoProject]
         const next = loaded.length ? loaded : fallback
         setProjects(next)
-        setSelectedId(next[0]?.id ?? "")
+        setSelectedId((current) => (current && next.some((p) => p.id === current) ? current : next[0]?.id ?? ""))
         setProjectsLoading(false)
-        syncOfflineProjects().then(() => loadProjects(auth.user?.id ?? null)).then((synced) => {
-          if (!active || !synced.length) return
-          setProjects(synced)
-        }).catch(() => {})
+        void syncOfflineProjects()
+          .then(() => loadProjects(auth.user?.id ?? null))
+          .then((synced) => {
+            if (!active || !synced.length) return
+            // Merge to avoid clobbering edits made while the background sync ran.
+            setProjects((current) => {
+              const byId = new Map(synced.map((p) => [p.id, p]))
+              const merged = current.map((p) => {
+                const remote = byId.get(p.id)
+                if (!remote) return p
+                return Date.parse(remote.updatedAt || "") > Date.parse(p.updatedAt || "") ? remote : p
+              })
+              for (const p of synced) if (!current.some((c) => c.id === p.id)) merged.push(p)
+              return merged
+            })
+          })
+          .catch((error) => console.warn("Background project sync failed", error))
       })
       .catch((error) => {
         if (!active) return
@@ -5316,6 +5374,7 @@ export default function App() {
           : "plan",
     )
   }
+
   const importProjectFromFile = async (file: File) => {
     try {
       const text = await file.text()
@@ -5349,13 +5408,13 @@ export default function App() {
           tags: Array.isArray(source.tags) ? source.tags : [],
         }
       } else if (file.name.toLowerCase().endsWith(".csv")) {
-        const rows = text.split(/\\r?\\n/).filter(Boolean)
-        const header = rows[0]?.split(",").map((h) => h.trim().toLowerCase()) ?? []
+        const rows = parseCsvRows(text)
+        const header = (rows[0] ?? []).map((h) => h.trim().toLowerCase())
         const taskIdx = header.indexOf("task") >= 0 ? header.indexOf("task") : header.indexOf("title")
         const phaseIdx = header.indexOf("phase")
         const tasks: Array<{ id: string; title: string; description: string; priority: any; duration: string; dependency: string; resource: string; deliverable: string }> = []
         for (let i = 1; i < rows.length; i++) {
-          const cols = rows[i].split(",").map((c) => c.trim())
+          const cols = (rows[i] ?? []).map((c) => c.trim())
           const title = taskIdx >= 0 ? cols[taskIdx] : cols[0]
           if (!title) continue
           tasks.push({
